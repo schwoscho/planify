@@ -7,20 +7,18 @@ import Onboarding from '@/components/Onboarding'
 import MainApp from '@/components/MainApp'
 
 export default function Home() {
-  const [user, setUser] = useState(null)
-  const [profile, setProfile] = useState(null)
+  const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) loadProfile(session.user.id)
       else setLoading(false)
     })
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
       setUser(session?.user ?? null)
       if (session?.user) loadProfile(session.user.id)
       else { setProfile(null); setLoading(false) }
@@ -29,7 +27,7 @@ export default function Home() {
     return () => subscription.unsubscribe()
   }, [])
 
-  async function loadProfile(userId) {
+  async function loadProfile(userId: string) {
     try {
       const { data } = await supabase
         .from('profiles')
@@ -44,7 +42,7 @@ export default function Home() {
     }
   }
 
-  function handleProfileSaved(newProfile) {
+  function handleProfileSaved(newProfile: any) {
     setProfile(newProfile)
   }
 
