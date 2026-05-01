@@ -40,7 +40,7 @@ const s = {
   grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '1.5rem' },
   chip: (sel) => ({
     padding: '14px 12px', borderRadius: '12px', border: `1.5px solid ${sel ? '#2D6A4F' : '#e8e8e4'}`,
-    background: sel ? '#F0FAF4' : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all .18s'
+    background: sel ? '#F0FAF4' : '#fff', cursor: 'pointer', textAlign: 'left' as const, transition: 'all .18s'
   }),
   chipIcon: { fontSize: '20px', marginBottom: '6px', display: 'block' },
   chipLabel: (sel) => ({ fontSize: '13px', fontWeight: '500', color: sel ? '#2D6A4F' : '#1a1a1a', display: 'block' }),
@@ -92,7 +92,7 @@ export default function Onboarding({ user, onComplete }) {
 
   const steps = [
     // Step 0 — Welcome
-    <div key="welcome" style={{ textAlign: 'center', padding: '2rem 0' }}>
+    <div key="welcome" style={{ textAlign: 'center' as const as const, padding: '2rem 0' }}>
       <div style={{ fontSize: '64px', marginBottom: '1rem' }}>🥗</div>
       <div style={{ fontFamily: 'Georgia, serif', fontSize: '28px', fontWeight: '600', color: '#2D6A4F', marginBottom: '8px' }}>
         Welcome to Planify
@@ -174,7 +174,7 @@ export default function Onboarding({ user, onComplete }) {
       <div style={s.tag}>Step 4 of 4</div>
       <div style={s.title}>Weekly food <em style={{ fontStyle: 'italic', fontWeight: '300', color: '#2D6A4F' }}>budget?</em></div>
       <div style={s.sub}>We'll keep suggestions within this. Change it anytime.</div>
-      <div style={{ textAlign: 'center', margin: '1.5rem 0 .5rem' }}>
+      <div style={{ textAlign: 'center' as const as const, margin: '1.5rem 0 .5rem' }}>
         <div style={{ fontFamily: 'Georgia, serif', fontSize: '48px', fontWeight: '600', color: '#2D6A4F' }}>€{budget}</div>
         <div style={{ fontSize: '14px', color: '#6b7280' }}>per week</div>
       </div>
