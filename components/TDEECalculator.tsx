@@ -9,11 +9,11 @@ interface TDEEProps {
 }
 
 const ACTIVITY_LEVELS = [
-  { value: 1.2, label: 'Sedentary', desc: 'Desk job, little exercise', icon: '🪑' },
-  { value: 1.375, label: 'Lightly active', desc: '1–3 workouts/week', icon: '🚶' },
-  { value: 1.55, label: 'Moderately active', desc: '3–5 workouts/week', icon: '🏃' },
-  { value: 1.725, label: 'Very active', desc: '6–7 workouts/week', icon: '💪' },
-  { value: 1.9, label: 'Athlete', desc: 'Twice daily training', icon: '🏆' },
+  { value: 1.2,   label: 'Sedentary',         desc: 'Desk job, little exercise',   icon: '🪑' },
+  { value: 1.375, label: 'Lightly active',     desc: '1–3 workouts/week',           icon: '🚶' },
+  { value: 1.55,  label: 'Moderately active',  desc: '3–5 workouts/week',           icon: '🏃' },
+  { value: 1.725, label: 'Very active',         desc: '6–7 workouts/week',           icon: '💪' },
+  { value: 1.9,   label: 'Athlete',            desc: 'Twice daily training',        icon: '🏆' },
 ]
 
 const GOAL_ADJUSTMENTS: Record<string, number> = {
@@ -21,11 +21,11 @@ const GOAL_ADJUSTMENTS: Record<string, number> = {
 }
 
 const GOAL_MACROS: Record<string, { protein: number, fat: number }> = {
-  bulk: { protein: 2.2, fat: 0.9 },
-  cut: { protein: 2.4, fat: 0.8 },
+  bulk:     { protein: 2.2, fat: 0.9 },
+  cut:      { protein: 2.4, fat: 0.8 },
   maintain: { protein: 1.8, fat: 0.9 },
-  energy: { protein: 1.8, fat: 1.0 },
-  gut: { protein: 1.6, fat: 1.0 },
+  energy:   { protein: 1.8, fat: 1.0 },
+  gut:      { protein: 1.6, fat: 1.0 },
 }
 
 export default function TDEECalculator({ goal, onComplete, onSkip }: TDEEProps) {
@@ -43,7 +43,6 @@ export default function TDEECalculator({ goal, onComplete, onSkip }: TDEEProps) 
     const a = parseInt(age)
     if (!w || !h || !a || !sex || !activity) return
 
-    // Mifflin-St Jeor BMR
     const bmr = sex === 'male'
       ? 10 * w + 6.25 * h - 5 * a + 5
       : 10 * w + 6.25 * h - 5 * a - 161
@@ -63,16 +62,88 @@ export default function TDEECalculator({ goal, onComplete, onSkip }: TDEEProps) 
   }
 
   const s = {
-    wrap: { minHeight: '100vh', background: 'var(--color-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' },
+    wrap: {
+      minHeight: '100vh',
+      background: 'var(--color-bg)',
+      display: 'flex',
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      padding: '1.5rem',
+    },
     inner: { width: '100%', maxWidth: '420px' },
-    title: { fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: '600', color: 'var(--color-text)', lineHeight: '1.2', marginBottom: '6px' },
-    sub: { fontSize: '14px', color: 'var(--color-text-muted)', lineHeight: '1.6', marginBottom: '1.5rem' },
-    label: { fontSize: '12px', fontWeight: '500', color: 'var(--color-text-muted)', marginBottom: '6px', display: 'block' },
-    input: { width: '100%', border: '1.5px solid var(--color-border)', borderRadius: '12px', padding: '12px 14px', fontSize: '16px', fontFamily: 'var(--font-body)', background: 'var(--color-bg)', color: 'var(--color-text)', outline: 'none', boxSizing: 'border-box' as const, marginBottom: '1rem' },
-    btn: { width: '100%', padding: '14px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '600' as const, cursor: 'pointer', fontFamily: 'var(--font-body)', marginTop: '.5rem' },
-    skip: { width: '100%', padding: '10px', background: 'transparent', border: 'none', fontSize: '13px', color: 'var(--color-text-muted)', cursor: 'pointer', fontFamily: 'var(--font-body)', marginTop: '4px' },
+    backBtn: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      background: 'none',
+      border: 'none',
+      color: 'var(--color-text-muted)',
+      fontSize: '14px',
+      cursor: 'pointer',
+      fontFamily: 'var(--font-body)',
+      padding: '0 0 1.25rem',
+    },
+    title: {
+      fontFamily: 'var(--font-display)',
+      fontSize: '24px',
+      fontWeight: '600' as const,
+      color: 'var(--color-text)',
+      lineHeight: '1.2',
+      marginBottom: '6px',
+    },
+    sub: {
+      fontSize: '14px',
+      color: 'var(--color-text-muted)',
+      lineHeight: '1.6',
+      marginBottom: '1.5rem',
+    },
+    label: {
+      fontSize: '12px',
+      fontWeight: '500' as const,
+      color: 'var(--color-text-muted)',
+      marginBottom: '6px',
+      display: 'block',
+    },
+    input: {
+      width: '100%',
+      border: '1.5px solid var(--color-border)',
+      borderRadius: '12px',
+      padding: '12px 14px',
+      fontSize: '16px',
+      fontFamily: 'var(--font-body)',
+      background: 'var(--color-bg)',
+      color: 'var(--color-text)',
+      outline: 'none',
+      boxSizing: 'border-box' as const,
+      marginBottom: '1rem',
+    },
+    btn: {
+      width: '100%',
+      padding: '14px',
+      background: 'var(--color-primary)',
+      color: '#fff',
+      border: 'none',
+      borderRadius: '12px',
+      fontSize: '15px',
+      fontWeight: '600' as const,
+      cursor: 'pointer',
+      fontFamily: 'var(--font-body)',
+      marginTop: '.5rem',
+    },
+    skip: {
+      width: '100%',
+      padding: '10px',
+      background: 'transparent',
+      border: 'none',
+      fontSize: '13px',
+      color: 'var(--color-text-muted)',
+      cursor: 'pointer',
+      fontFamily: 'var(--font-body)',
+      marginTop: '4px',
+    },
   }
 
+  // ── STEP 0: intro ──
   if (step === 0) {
     return (
       <div style={s.wrap}>
@@ -82,7 +153,6 @@ export default function TDEECalculator({ goal, onComplete, onSkip }: TDEEProps) 
             <div style={s.title}>Calculate your exact calorie target</div>
             <div style={s.sub}>We'll use your body stats to calculate precisely how many calories and macros you need daily. Takes 30 seconds.</div>
           </div>
-
           <div style={{ background: 'var(--color-primary-pale)', border: '1px solid var(--color-primary-border)', borderRadius: '12px', padding: '14px', marginBottom: '1.5rem' }}>
             {[
               { icon: '🎯', text: 'Personalised calorie target based on your body' },
@@ -95,7 +165,6 @@ export default function TDEECalculator({ goal, onComplete, onSkip }: TDEEProps) 
               </div>
             ))}
           </div>
-
           <button style={s.btn} onClick={() => setStep(1)}>Calculate my targets →</button>
           <button style={s.skip} onClick={onSkip}>Skip — use default targets</button>
         </div>
@@ -103,17 +172,21 @@ export default function TDEECalculator({ goal, onComplete, onSkip }: TDEEProps) 
     )
   }
 
+  // ── STEP 1: body stats ──
   if (step === 1) {
+    const canCalculate = sex && age && weight && height && activity
     return (
       <div style={s.wrap}>
         <div style={s.inner}>
-          <div style={{ marginBottom: '1.5rem' }}>
-            <div style={{ height: '3px', background: 'var(--color-border)', borderRadius: '2px', overflow: 'hidden', marginBottom: '1.5rem' }}>
-              <div style={{ height: '100%', background: 'var(--color-primary-light)', width: '60%', transition: 'width .4s' }} />
-            </div>
-            <div style={s.title}>Your <em style={{ fontStyle: 'italic', fontWeight: '300', color: 'var(--color-primary)' }}>body stats</em></div>
-            <div style={s.sub}>Used only to calculate your calorie needs. Never shared.</div>
+          {/* Back button */}
+          <button style={s.backBtn} onClick={() => setStep(0)}>← Back</button>
+
+          <div style={{ height: '3px', background: 'var(--color-border)', borderRadius: '2px', overflow: 'hidden', marginBottom: '1.5rem' }}>
+            <div style={{ height: '100%', background: 'var(--color-primary-light)', width: '60%', transition: 'width .4s' }} />
           </div>
+
+          <div style={s.title}>Your <em style={{ fontStyle: 'italic', fontWeight: '300', color: 'var(--color-primary)' }}>body stats</em></div>
+          <div style={s.sub}>Used only to calculate your calorie needs. Never shared.</div>
 
           {/* Sex */}
           <div style={{ marginBottom: '1rem' }}>
@@ -131,20 +204,24 @@ export default function TDEECalculator({ goal, onComplete, onSkip }: TDEEProps) 
           {/* Stats */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '1rem' }}>
             {[
-              { label: 'Age (years)', placeholder: '25', ref: age, set: setAge },
-              { label: 'Weight (kg)', placeholder: '75', ref: weight, set: setWeight },
-              { label: 'Height (cm)', placeholder: '175', ref: height, set: setHeight },
+              { label: 'Age (years)', placeholder: '25', val: age, set: setAge },
+              { label: 'Weight (kg)', placeholder: '75',  val: weight, set: setWeight },
+              { label: 'Height (cm)', placeholder: '175', val: height, set: setHeight },
             ].map(field => (
               <div key={field.label}>
                 <label style={{ ...s.label, fontSize: '11px' }}>{field.label}</label>
-                <input type="number" placeholder={field.placeholder} value={field.ref}
+                <input
+                  type="number"
+                  placeholder={field.placeholder}
+                  value={field.val}
                   onChange={e => field.set(e.target.value)}
-                  style={{ ...s.input, marginBottom: 0, textAlign: 'center' as const, fontSize: '18px', fontWeight: '600', padding: '10px' }} />
+                  style={{ ...s.input, marginBottom: 0, textAlign: 'center' as const, fontSize: '18px', fontWeight: '600', padding: '10px' }}
+                />
               </div>
             ))}
           </div>
 
-          {/* Activity */}
+          {/* Activity level */}
           <div style={{ marginBottom: '1rem' }}>
             <label style={s.label}>Activity level</label>
             {ACTIVITY_LEVELS.map(level => (
@@ -155,16 +232,18 @@ export default function TDEECalculator({ goal, onComplete, onSkip }: TDEEProps) 
                   <div style={{ fontSize: '13px', fontWeight: '500', color: activity === level.value ? 'var(--color-primary)' : 'var(--color-text)' }}>{level.label}</div>
                   <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{level.desc}</div>
                 </div>
-                <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: `2px solid ${activity === level.value ? 'var(--color-primary)' : 'var(--color-border)'}`, background: activity === level.value ? 'var(--color-primary)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: '18px', height: '18px', borderRadius: '50%', border: `2px solid ${activity === level.value ? 'var(--color-primary)' : 'var(--color-border)'}`, background: activity === level.value ? 'var(--color-primary)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   {activity === level.value && <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#fff' }} />}
                 </div>
               </div>
             ))}
           </div>
 
-          <button style={{ ...s.btn, opacity: (!sex || !age || !weight || !height || !activity) ? 0.4 : 1 }}
-            disabled={!sex || !age || !weight || !height || !activity}
-            onClick={calculate}>
+          <button
+            style={{ ...s.btn, opacity: canCalculate ? 1 : 0.4 }}
+            disabled={!canCalculate}
+            onClick={calculate}
+          >
             Calculate →
           </button>
           <button style={s.skip} onClick={onSkip}>Skip</button>
@@ -173,10 +252,13 @@ export default function TDEECalculator({ goal, onComplete, onSkip }: TDEEProps) 
     )
   }
 
-  // Step 2 — Results
+  // ── STEP 2: results ──
   return (
     <div style={s.wrap}>
       <div style={s.inner}>
+        {/* Back button */}
+        <button style={s.backBtn} onClick={() => setStep(1)}>← Back</button>
+
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
           <div style={{ fontSize: '48px', marginBottom: '12px' }}>🎯</div>
           <div style={s.title}>Your personal targets</div>
@@ -199,8 +281,8 @@ export default function TDEECalculator({ goal, onComplete, onSkip }: TDEEProps) 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
           {[
             { label: 'Protein', val: result?.protein + 'g', sub: result?.protein * 4 + ' kcal', color: 'var(--color-primary)' },
-            { label: 'Carbs', val: result?.carbs + 'g', sub: result?.carbs * 4 + ' kcal', color: 'var(--color-blue)' },
-            { label: 'Fat', val: result?.fat + 'g', sub: result?.fat * 9 + ' kcal', color: 'var(--color-amber)' },
+            { label: 'Carbs',   val: result?.carbs + 'g',   sub: result?.carbs * 4 + ' kcal',   color: 'var(--color-blue)' },
+            { label: 'Fat',     val: result?.fat + 'g',     sub: result?.fat * 9 + ' kcal',     color: 'var(--color-amber)' },
           ].map(m => (
             <div key={m.label} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '12px', textAlign: 'center' as const }}>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: '600', color: m.color }}>{m.val}</div>
@@ -210,14 +292,20 @@ export default function TDEECalculator({ goal, onComplete, onSkip }: TDEEProps) 
           ))}
         </div>
 
-        {/* BMR info */}
+        {/* BMR explanation */}
         <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px 14px', marginBottom: '1.25rem', fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: '1.6' }}>
-          Your BMR (at rest) is <strong style={{ color: 'var(--color-text)' }}>{result?.bmr} kcal</strong>. With your activity level, you burn <strong style={{ color: 'var(--color-text)' }}>{result?.tdee} kcal/day</strong>. We've {result?.targetCals > result?.tdee ? 'added 300 kcal for muscle gain' : result?.targetCals < result?.tdee ? 'subtracted 400 kcal for fat loss' : 'kept this at maintenance'}.
+          Your BMR (at rest) is <strong style={{ color: 'var(--color-text)' }}>{result?.bmr} kcal</strong>. With your activity level, you burn <strong style={{ color: 'var(--color-text)' }}>{result?.tdee} kcal/day</strong>.{' '}
+          {result?.targetCals > result?.tdee
+            ? 'We\'ve added 300 kcal for muscle gain.'
+            : result?.targetCals < result?.tdee
+            ? 'We\'ve subtracted 400 kcal for fat loss.'
+            : 'We\'ve kept this at maintenance.'}
         </div>
 
         <button style={s.btn} onClick={() => onComplete({ tdee: result.targetCals, protein: result.protein, carbs: result.carbs, fat: result.fat })}>
           Save my targets & start →
         </button>
+        <button style={s.skip} onClick={onSkip}>Skip for now</button>
       </div>
     </div>
   )

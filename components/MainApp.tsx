@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { saveProfile } from '@/lib/auth'
 import {
-  saveMeal, getMeals, deleteMeal,
+  saveMeal, getMeals,
   addFoodLog, getFoodLog, deleteFoodLog,
   saveWaterLog, getWaterLog,
   saveWeightLog, getWeightLog, deleteWeightLog,
@@ -19,9 +19,31 @@ import Modal from './Modal'
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const GL: Record<string, string> = { bulk: 'Bulking 💪', cut: 'Cutting 🔥', maintain: 'Balanced ⚖️', energy: 'Energy ⚡', gut: 'Gut health 🌿' }
 const TARGET: Record<string, number> = { bulk: 2700, cut: 1750, maintain: 2000, energy: 2000, gut: 1900 }
-const ACT_BURNS: Record<string, number> = { running: 10, cycling: 7, gym: 6, swimming: 9, walking: 4, yoga: 3, hiit: 11, other: 6 }
-const ACT_ICONS: Record<string, string> = { running: '🏃', cycling: '🚴', gym: '🏋️', swimming: '🏊', walking: '🚶', yoga: '🧘', hiit: '🔥', other: '⚡' }
-const ACT_LABELS: Record<string, string> = { running: 'Running', cycling: 'Cycling', gym: 'Gym / weights', swimming: 'Swimming', walking: 'Walking', yoga: 'Yoga', hiit: 'HIIT', other: 'Activity' }
+
+// Expanded activity list with calories burned per minute
+const ACTIVITIES = [
+  { value: 'running',     label: 'Running',         icon: '🏃', burn: 10 },
+  { value: 'cycling',     label: 'Cycling',         icon: '🚴', burn: 7  },
+  { value: 'gym',         label: 'Gym / weights',   icon: '🏋️', burn: 6  },
+  { value: 'swimming',    label: 'Swimming',        icon: '🏊', burn: 9  },
+  { value: 'walking',     label: 'Walking',         icon: '🚶', burn: 4  },
+  { value: 'yoga',        label: 'Yoga',            icon: '🧘', burn: 3  },
+  { value: 'hiit',        label: 'HIIT',            icon: '🔥', burn: 11 },
+  { value: 'tennis',      label: 'Tennis',          icon: '🎾', burn: 8  },
+  { value: 'boxing',      label: 'Boxing',          icon: '🥊', burn: 10 },
+  { value: 'basketball',  label: 'Basketball',      icon: '🏀', burn: 8  },
+  { value: 'football',    label: 'Football',        icon: '⚽', burn: 9  },
+  { value: 'volleyball',  label: 'Volleyball',      icon: '🏐', burn: 5  },
+  { value: 'hiking',      label: 'Hiking',          icon: '🥾', burn: 6  },
+  { value: 'dancing',     label: 'Dancing',         icon: '💃', burn: 6  },
+  { value: 'rowing',      label: 'Rowing',          icon: '🚣', burn: 8  },
+  { value: 'pilates',     label: 'Pilates',         icon: '🤸', burn: 4  },
+  { value: 'climbing',    label: 'Rock climbing',   icon: '🧗', burn: 9  },
+  { value: 'skiing',      label: 'Skiing',          icon: '⛷️', burn: 8  },
+  { value: 'jump_rope',   label: 'Jump rope',       icon: '🪢', burn: 12 },
+  { value: 'other',       label: 'Other',           icon: '⚡', burn: 6  },
+]
+
 const TABS = ['home', 'meals', 'tracker', 'grocery', 'health', 'assist', 'profile']
 const TAB_ICONS: Record<string, string> = { home: '🏠', meals: '🥗', tracker: '📊', grocery: '🛒', health: '💧', assist: '🤖', profile: '👤' }
 const TAB_LABELS: Record<string, string> = { home: 'Home', meals: 'Meals', tracker: 'Tracker', grocery: 'Grocery', health: 'Health', assist: 'Coach', profile: 'Profile' }
@@ -31,11 +53,11 @@ const DIET_ICONS: Record<string, string> = { vegetarian: '🥦', vegan: '🌱', 
 const ALLERGIES = ['nuts', 'shellfish', 'eggs', 'soy', 'fish', 'sesame']
 const ALLERGY_ICONS: Record<string, string> = { nuts: '🥜', shellfish: '🦐', eggs: '🥚', soy: '🫘', fish: '🐟', sesame: '🌰' }
 const GOALS = [
-  { value: 'bulk', icon: '💪', label: 'Build muscle (bulk)', desc: 'High protein, caloric surplus' },
-  { value: 'cut', icon: '🔥', label: 'Lose weight (cut)', desc: 'Caloric deficit, high protein' },
-  { value: 'maintain', icon: '⚖️', label: 'Stay balanced', desc: 'Balanced macros' },
-  { value: 'energy', icon: '⚡', label: 'Boost energy', desc: 'Low glycaemic' },
-  { value: 'gut', icon: '🌿', label: 'Gut health', desc: 'Fibre-rich foods' },
+  { value: 'bulk',     icon: '💪', label: 'Build muscle (bulk)', desc: 'High protein, caloric surplus' },
+  { value: 'cut',      icon: '🔥', label: 'Lose weight (cut)',   desc: 'Caloric deficit, high protein' },
+  { value: 'maintain', icon: '⚖️', label: 'Stay balanced',       desc: 'Balanced macros' },
+  { value: 'energy',   icon: '⚡', label: 'Boost energy',        desc: 'Low glycaemic' },
+  { value: 'gut',      icon: '🌿', label: 'Gut health',          desc: 'Fibre-rich foods' },
 ]
 
 function getMonday() {
@@ -70,7 +92,6 @@ function useTheme() {
   return { theme, toggle }
 }
 
-// ── TOGGLE SWITCH ──
 function ToggleSwitch({ value, onChange }: { value: boolean, onChange: (v: boolean) => void }) {
   return (
     <div onClick={() => onChange(!value)}
@@ -81,7 +102,11 @@ function ToggleSwitch({ value, onChange }: { value: boolean, onChange: (v: boole
 }
 
 function SL({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-text-muted)', textTransform: 'uppercase' as const, letterSpacing: '.08em', marginBottom: '8px' }}>{children}</div>
+  return (
+    <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-text-muted)', textTransform: 'uppercase' as const, letterSpacing: '.08em', marginBottom: '8px' }}>
+      {children}
+    </div>
+  )
 }
 
 export default function MainApp({ user, profile, onProfileUpdate }: any) {
@@ -111,9 +136,8 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const [logModalOpen, setLogModalOpen] = useState(false)
   const [actModalOpen, setActModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState<string | null>(null)
-  const [savedModalOpen, setSavedModalOpen] = useState(false)
 
-  // Meal modal state
+  // Meal modal
   const [mealSuggestions, setMealSuggestions] = useState<any[]>([])
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [mealFilters, setMealFilters] = useState({ time: null as string | null, diff: null as string | null, rtype: [] as string[] })
@@ -121,24 +145,24 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const [savedToast, setSavedToast] = useState(false)
   const [showSaved, setShowSaved] = useState(false)
 
-  // Food log modal — refs to fix keyboard bug
+  // Food log modal — refs prevent keyboard close bug
   const [foodMealTime, setFoodMealTime] = useState('breakfast')
   const [logLoading, setLogLoading] = useState(false)
   const [logResult, setLogResult] = useState<any>(null)
   const foodNameRef = useRef<HTMLInputElement>(null)
   const foodPortionRef = useRef<HTMLInputElement>(null)
 
-  // Activity modal — ref to fix keyboard bug
+  // Activity modal — dropdown + ref
   const [actType, setActType] = useState<string | null>(null)
   const [actBurnPreview, setActBurnPreview] = useState<number | null>(null)
   const actDurRef = useRef<HTMLInputElement>(null)
 
-  // Health state
+  // Health
   const [waterGoal] = useState(profile?.water_goal || 2500)
   const [weightInput, setWeightInput] = useState('')
   const [weightGoal] = useState(profile?.weight_goal || 75)
 
-  // Profile state
+  // Profile
   const [editProfile, setEditProfile] = useState<any>({ ...profile })
   const [avatar, setAvatar] = useState(profile?.avatar || '🥗')
 
@@ -149,7 +173,6 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   async function loadAll() {
     await Promise.all([loadMeals(), loadGrocery(), loadFoodLog(), loadWater(), loadWeight(), loadActivity(), loadSavedRecipes()])
   }
-
   async function loadMeals() {
     try {
       const data = await getMeals(user.id, weekStart)
@@ -166,7 +189,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   }
   async function loadWater() {
     try {
-      const data = await getWaterLog(user.id, dateKey(new Date(Date.now() - 13 * 86400000)))
+      const data = await getWaterLog(user.id, dateKey(new Date(Date.now() - 30 * 86400000)))
       const map: Record<string, number> = {}
       data.forEach((w: any) => { map[w.logged_date] = w.amount })
       setWaterLog(map)
@@ -188,6 +211,12 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     if (newTab === tab) return
     setTab(newTab)
     setTabKey(k => k + 1)
+  }
+
+  // View all meals — always goes to This week
+  function viewAllMeals() {
+    setShowSaved(false)
+    switchTab('meals')
   }
 
   // ── MEALS ──
@@ -278,9 +307,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
   async function setWaterGlass(idx: number) {
     if (goalReached) return
-    const newAmount = Math.min(((idx + 1) / 5) * waterGoal, waterGoal)
     const filled = Math.round((waterToday / waterGoal) * 5)
-    const finalAmount = idx < filled ? (idx / 5) * waterGoal : newAmount
+    const finalAmount = idx < filled
+      ? Math.min((idx / 5) * waterGoal, waterGoal)
+      : Math.min(((idx + 1) / 5) * waterGoal, waterGoal)
     setWaterToday(finalAmount)
     try { await saveWaterLog(user.id, todayKey(), Math.round(finalAmount), waterGoal); await loadWater() } catch (e) { console.error(e) }
   }
@@ -296,9 +326,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   async function logActivity() {
     const dur = parseInt(actDurRef.current?.value || '0')
     if (!actType || !dur) return
-    const burned = Math.round((ACT_BURNS[actType] || 6) * dur)
+    const act = ACTIVITIES.find(a => a.value === actType)
+    const burned = Math.round((act?.burn || 6) * dur)
     try {
-      await addActivityLog(user.id, todayKey(), { type: actType, label: ACT_LABELS[actType], duration: dur, burned })
+      await addActivityLog(user.id, todayKey(), { type: actType, label: act?.label || actType, duration: dur, burned })
       await loadActivity()
       setActModalOpen(false)
       setActType(null)
@@ -331,7 +362,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     setChatLoading(false)
   }
 
-  // ── PROFILE UPDATE ──
+  // ── PROFILE ──
   async function saveEditedProfile() {
     try {
       const updated = await saveProfile(user.id, { ...editProfile, avatar })
@@ -389,6 +420,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         onLogActivity={() => setActModalOpen(true)}
         onAddWater={updateWater}
         onSwitchTab={switchTab}
+        onViewAllMeals={viewAllMeals}
       />
     )
   }
@@ -400,21 +432,23 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
           <div className={`chip pressable ${!showSaved ? 'active-green' : ''}`} onClick={() => setShowSaved(false)}>📅 This week</div>
           <div className={`chip pressable ${showSaved ? 'active-green' : ''}`} onClick={() => setShowSaved(true)}>
-            ❤️ Saved {savedRecipes.length > 0 && <span style={{ background: 'var(--color-primary)', color: '#fff', borderRadius: '50%', padding: '1px 6px', fontSize: '10px', marginLeft: '4px' }}>{savedRecipes.length}</span>}
+            ❤️ Saved {savedRecipes.length > 0 && (
+              <span style={{ background: 'var(--color-primary)', color: '#fff', borderRadius: '50%', padding: '1px 6px', fontSize: '10px', marginLeft: '4px' }}>{savedRecipes.length}</span>
+            )}
           </div>
         </div>
 
         {showSaved ? (
-          // Saved recipes view
           <div>
             {!savedRecipes.length ? (
               <div className="empty-state">
                 <div className="empty-icon">❤️</div>
                 <div className="empty-title">No saved recipes yet</div>
-                <div className="empty-desc">When Planify suggests a meal you love, tap 🤍 to save it here for quick access.</div>
+                <div className="empty-desc">When Planify suggests a meal you love, tap 🤍 to save it here.</div>
               </div>
             ) : savedRecipes.map((recipe: any) => (
               <div key={recipe.id} className="card anim-fade-slide" style={{ marginBottom: '10px', position: 'relative' as const }}>
+                <div style={{ position: 'absolute' as const, top: '12px', right: '12px', fontSize: '18px' }}>❤️</div>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '600', marginBottom: '4px', paddingRight: '32px' }}>{recipe.name}</div>
                 <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '8px' }}>{recipe.description}</div>
                 {recipe.macros && (
@@ -442,24 +476,37 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                     Remove
                   </button>
                 </div>
-                <div style={{ position: 'absolute' as const, top: '12px', right: '12px', fontSize: '18px' }}>❤️</div>
               </div>
             ))}
           </div>
         ) : (
-          // This week view
           <div>
             {profile?.goal && (
               <div className="profile-banner">
                 <span style={{ fontSize: '16px' }}>✓</span>
-                <span className="profile-banner-text">Tailored to: <strong>{GL[profile.goal]}</strong>{profile.diet?.length ? ` · ${profile.diet[0]}` : ''} · €{profile.budget}/wk{profile.tdee ? ` · ${profile.tdee} kcal target` : ''}</span>
+                <span className="profile-banner-text">
+                  Tailored to: <strong>{GL[profile.goal]}</strong>
+                  {profile.diet?.length ? ` · ${profile.diet[0]}` : ''} · €{profile.budget}/wk
+                  {profile.tdee ? ` · ${profile.tdee} kcal target` : ''}
+                </span>
               </div>
             )}
 
             {/* Filter bar */}
             <div className="overflow-x-auto flex gap-2" style={{ marginBottom: '12px' }}>
-              {[{ id: 'all', label: 'All' }, { id: 'quick', label: '⚡ Quick', type: 'time' }, { id: 'medium', label: '🕐 Medium', type: 'time' }, { id: 'weekend', label: '👨‍🍳 Weekend', type: 'time' }, { id: 'easy', label: '😊 Easy', type: 'diff' }, { id: 'medium-d', label: '🤔 Medium', type: 'diff' }, { id: 'advanced', label: '🎓 Advanced', type: 'diff' }].map(f => {
-                const isActive = f.id === 'all' ? !mealFilters.time && !mealFilters.diff : f.type === 'time' ? mealFilters.time === f.id : mealFilters.diff === f.id.replace('-d', '')
+              {[
+                { id: 'all', label: 'All' },
+                { id: 'quick', label: '⚡ Quick', type: 'time' },
+                { id: 'medium', label: '🕐 Medium', type: 'time' },
+                { id: 'weekend', label: '👨‍🍳 Weekend', type: 'time' },
+                { id: 'easy', label: '😊 Easy', type: 'diff' },
+                { id: 'medium-d', label: '🤔 Medium', type: 'diff' },
+                { id: 'advanced', label: '🎓 Advanced', type: 'diff' },
+              ].map(f => {
+                const isActive = f.id === 'all'
+                  ? !mealFilters.time && !mealFilters.diff
+                  : f.type === 'time' ? mealFilters.time === f.id
+                  : mealFilters.diff === f.id.replace('-d', '')
                 return (
                   <div key={f.id} className={`chip pressable ${isActive ? (f.type === 'diff' ? 'active-amber' : 'active-green') : ''}`}
                     onClick={() => {
@@ -486,16 +533,28 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                 <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: '1.5', marginBottom: '10px' }}>{todayMeal.description}</div>
                 {todayMeal.macros && (
                   <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
-                    {[{ val: todayMeal.macros.calories, label: 'kcal', color: 'var(--color-amber)' }, { val: todayMeal.macros.protein + 'g', label: 'protein', color: 'var(--color-primary)' }, { val: todayMeal.macros.carbs + 'g', label: 'carbs', color: 'var(--color-blue)' }, { val: todayMeal.macros.fat + 'g', label: 'fat', color: 'var(--color-purple)' }].map(m => (
-                      <div key={m.label} className="macro-card"><div className="macro-val" style={{ color: m.color }}>{m.val}</div><div className="macro-label">{m.label}</div></div>
+                    {[
+                      { val: todayMeal.macros.calories, label: 'kcal', color: 'var(--color-amber)' },
+                      { val: todayMeal.macros.protein + 'g', label: 'protein', color: 'var(--color-primary)' },
+                      { val: todayMeal.macros.carbs + 'g', label: 'carbs', color: 'var(--color-blue)' },
+                      { val: todayMeal.macros.fat + 'g', label: 'fat', color: 'var(--color-purple)' },
+                    ].map(m => (
+                      <div key={m.label} className="macro-card">
+                        <div className="macro-val" style={{ color: m.color }}>{m.val}</div>
+                        <div className="macro-label">{m.label}</div>
+                      </div>
                     ))}
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button className="pressable" onClick={() => { setMealModalOpen(true); setMealSuggestions([]) }}
-                    style={{ flex: 1, padding: '9px', borderRadius: '10px', border: `1.5px solid var(--color-border)`, background: 'var(--color-surface)', fontSize: '12px', fontWeight: '500', color: 'var(--color-text-muted)', cursor: 'pointer', fontFamily: 'inherit' }}>Change meal</button>
+                    style={{ flex: 1, padding: '9px', borderRadius: '10px', border: `1.5px solid var(--color-border)`, background: 'var(--color-surface)', fontSize: '12px', fontWeight: '500', color: 'var(--color-text-muted)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Change meal
+                  </button>
                   <button className="pressable" onClick={() => addToGrocery(activeDay)}
-                    style={{ flex: 1, padding: '9px', borderRadius: '10px', border: 'none', background: 'var(--color-primary)', fontSize: '12px', fontWeight: '500', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>Add to grocery →</button>
+                    style={{ flex: 1, padding: '9px', borderRadius: '10px', border: 'none', background: 'var(--color-primary)', fontSize: '12px', fontWeight: '500', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Add to grocery →
+                  </button>
                 </div>
               </div>
             ) : (
@@ -526,9 +585,12 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       <div key={tabKey} className="anim-fade-slide" style={{ padding: '0 1.25rem 1rem' }}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: '19px', fontWeight: '600', marginBottom: '10px' }}>Today's tracker</div>
 
-        {/* Net bar */}
         <div className="card" style={{ background: 'var(--color-primary-pale)', borderColor: 'var(--color-primary-border)', display: 'flex', gap: '10px', marginBottom: '10px' }}>
-          {[{ val: totalIn, label: 'calories in', color: 'var(--color-amber)' }, { val: totalBurned, label: 'burned', color: 'var(--color-red)' }, { val: netCals, label: 'net kcal', color: rc }].map((item, i) => (
+          {[
+            { val: totalIn,      label: 'calories in', color: 'var(--color-amber)' },
+            { val: totalBurned,  label: 'burned',       color: 'var(--color-red)'   },
+            { val: netCals,      label: 'net kcal',     color: rc                   },
+          ].map((item, i) => (
             <div key={i} style={{ flex: 1, textAlign: 'center' as const }}>
               <div style={{ fontSize: '20px', fontWeight: '600', fontFamily: 'var(--font-display)', color: item.color }}>{item.val}</div>
               <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px', textTransform: 'uppercase' as const, letterSpacing: '.04em' }}>{item.label}</div>
@@ -536,17 +598,22 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           ))}
         </div>
 
-        {/* Ring */}
         <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '10px' }}>
           <svg width="72" height="72" viewBox="0 0 72 72" style={{ flexShrink: 0 }}>
             <circle cx="36" cy="36" r={radius} fill="none" stroke="var(--color-border)" strokeWidth="6" />
-            <circle cx="36" cy="36" r={radius} fill="none" stroke={rc} strokeWidth="6" strokeDasharray={`${(pct * circ).toFixed(1)} ${circ.toFixed(1)}`} strokeLinecap="round" transform="rotate(-90 36 36)" style={{ transition: 'stroke-dasharray 0.5s ease' }} />
+            <circle cx="36" cy="36" r={radius} fill="none" stroke={rc} strokeWidth="6"
+              strokeDasharray={`${(pct * circ).toFixed(1)} ${circ.toFixed(1)}`}
+              strokeLinecap="round" transform="rotate(-90 36 36)"
+              style={{ transition: 'stroke-dasharray 0.5s ease' }} />
             <text x="36" y="41" textAnchor="middle" fontSize="13" fontWeight="600" fill={rc} fontFamily="sans-serif">{Math.round(pct * 100)}%</text>
           </svg>
           <div>
             <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '2px' }}>vs daily target</div>
             <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{netCals} kcal · target {tgt} kcal</div>
-            <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>{profile?.goal ? GL[profile.goal] : 'Set a goal'}{profile?.tdee ? ' · TDEE calculated' : ''}</div>
+            <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+              {profile?.goal ? GL[profile.goal] : 'Set a goal'}
+              {profile?.tdee ? ' · TDEE calculated ✓' : ''}
+            </div>
           </div>
         </div>
 
@@ -554,33 +621,50 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         <div className="card" style={{ marginBottom: '10px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <div style={{ fontSize: '13px', fontWeight: '500' }}>Food log</div>
-            <button className="pressable" onClick={() => { setLogResult(null); setLogModalOpen(true) }} style={{ fontSize: '12px', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '500', fontFamily: 'inherit' }}>+ Add food</button>
+            <button className="pressable" onClick={() => { setLogResult(null); setLogModalOpen(true) }}
+              style={{ fontSize: '12px', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '500', fontFamily: 'inherit' }}>
+              + Add food
+            </button>
           </div>
-          {!foodLog.length ? <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Nothing logged yet.</div> : foodLog.map((item: any) => (
-            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `0.5px solid var(--color-border)` }}>
-              <span style={{ fontSize: '13px' }}>{item.name}{item.portion ? ` (${item.portion})` : ''}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--color-amber)' }}>{item.calories} kcal</span>
-                <button className="pressable" onClick={async () => { try { await deleteFoodLog(user.id, item.id); await loadFoodLog() } catch(e){} }} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>×</button>
+          {!foodLog.length
+            ? <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Nothing logged yet.</div>
+            : foodLog.map((item: any) => (
+              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `0.5px solid var(--color-border)` }}>
+                <span style={{ fontSize: '13px' }}>{item.name}{item.portion ? ` (${item.portion})` : ''}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--color-amber)' }}>{item.calories} kcal</span>
+                  <button className="pressable" onClick={async () => { try { await deleteFoodLog(user.id, item.id); await loadFoodLog() } catch(e){} }}
+                    style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>×</button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          }
         </div>
 
         {/* Activity */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <div style={{ fontSize: '13px', fontWeight: '500' }}>Activity</div>
-            <button className="pressable" onClick={() => setActModalOpen(true)} style={{ fontSize: '12px', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '500', fontFamily: 'inherit' }}>+ Add</button>
+            <button className="pressable" onClick={() => setActModalOpen(true)}
+              style={{ fontSize: '12px', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '500', fontFamily: 'inherit' }}>
+              + Add
+            </button>
           </div>
-          {!activityLog.length ? <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>No activity logged.</div> : activityLog.map((item: any) => (
-            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 0', borderBottom: `0.5px solid var(--color-border)` }}>
-              <span style={{ fontSize: '18px' }}>{ACT_ICONS[item.type] || '⚡'}</span>
-              <span style={{ fontSize: '13px', flex: 1 }}>{item.label} · {item.duration} min</span>
-              <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--color-red)' }}>−{item.burned} kcal</span>
-              <button className="pressable" onClick={async () => { try { await deleteActivityLog(user.id, item.id); await loadActivity() } catch(e){} }} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>×</button>
-            </div>
-          ))}
+          {!activityLog.length
+            ? <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>No activity logged.</div>
+            : activityLog.map((item: any) => {
+              const act = ACTIVITIES.find(a => a.value === item.type)
+              return (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 0', borderBottom: `0.5px solid var(--color-border)` }}>
+                  <span style={{ fontSize: '18px' }}>{act?.icon || '⚡'}</span>
+                  <span style={{ fontSize: '13px', flex: 1 }}>{item.label} · {item.duration} min</span>
+                  <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--color-red)' }}>−{item.burned} kcal</span>
+                  <button className="pressable" onClick={async () => { try { await deleteActivityLog(user.id, item.id); await loadActivity() } catch(e){} }}
+                    style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>×</button>
+                </div>
+              )
+            })
+          }
         </div>
       </div>
     )
@@ -595,7 +679,9 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '19px', fontWeight: '600' }}>Grocery list</div>
           {grocery.some((g: any) => g.checked) && (
             <button className="pressable" onClick={async () => { await saveGroceryItems(user.id, weekStart, grocery.filter((g: any) => !g.checked)); await loadGrocery() }}
-              style={{ fontSize: '12px', color: 'var(--color-text-muted)', background: 'none', border: `1px solid var(--color-border)`, borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>Clear done</button>
+              style={{ fontSize: '12px', color: 'var(--color-text-muted)', background: 'none', border: `1px solid var(--color-border)`, borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}>
+              Clear done
+            </button>
           )}
         </div>
         {!grocery.length ? (
@@ -627,17 +713,30 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     const radius = 54, stroke = 8, circ = 2 * Math.PI * radius
     const dash = waterPct * circ
     const ringColor = waterPct >= 1 ? 'var(--color-cyan)' : waterPct >= .6 ? 'var(--color-blue)' : 'var(--color-blue-border)'
+
     return (
       <div key={tabKey} className="anim-fade-slide" style={{ padding: '0 1.25rem 1rem' }}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: '17px', fontWeight: '600', marginBottom: '10px' }}>💧 Water tracker</div>
 
-        {/* Streak */}
-        <div className="anim-scale-in" style={{ background: waterStreak === 0 ? 'linear-gradient(135deg,#6b7280,#4b5563)' : waterStreak >= 7 ? 'linear-gradient(135deg,#E74C3C,#E67E22)' : 'linear-gradient(135deg,#E67E22,#D4833A)', borderRadius: '16px', padding: '1.25rem', marginBottom: '12px', textAlign: 'center' as const, color: '#fff', boxShadow: waterStreak > 0 ? '0 4px 20px rgba(230,126,34,0.3)' : 'none' }}>
+        {/* Streak hero */}
+        <div className="anim-scale-in" style={{
+          background: waterStreak === 0
+            ? 'linear-gradient(135deg,#6b7280,#4b5563)'
+            : waterStreak >= 7
+            ? 'linear-gradient(135deg,#E74C3C,#E67E22)'
+            : 'linear-gradient(135deg,#E67E22,#D4833A)',
+          borderRadius: '16px', padding: '1.25rem', marginBottom: '12px', textAlign: 'center' as const, color: '#fff',
+          boxShadow: waterStreak > 0 ? '0 4px 20px rgba(230,126,34,0.3)' : 'none',
+        }}>
           <div className={waterStreak >= 1 ? 'anim-pulse' : ''} style={{ fontSize: '40px', marginBottom: '4px' }}>{waterStreak >= 1 ? '🔥' : '💤'}</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '44px', fontWeight: '600', lineHeight: 1 }}>{waterStreak}</div>
           <div style={{ fontSize: '14px', opacity: .85, marginTop: '4px' }}>day streak</div>
           <div style={{ fontSize: '12px', opacity: .65, marginTop: '4px' }}>
-            {waterStreak === 0 ? 'Hit your goal today to start!' : goalReached ? '🎉 Goal reached! See you tomorrow!' : `${waterGoal >= 1000 ? (waterGoal / 1000).toFixed(1) + 'L' : waterGoal + 'ml'} daily goal`}
+            {waterStreak === 0
+              ? 'Hit your goal today to start!'
+              : goalReached
+              ? '🎉 Goal reached! See you tomorrow!'
+              : `${waterGoal >= 1000 ? (waterGoal / 1000).toFixed(1) + 'L' : waterGoal + 'ml'} daily goal`}
           </div>
         </div>
 
@@ -646,17 +745,24 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           <div style={{ position: 'relative', width: '140px', height: '140px', margin: '0 auto 8px' }}>
             <svg width="140" height="140" viewBox="0 0 140 140">
               <circle cx="70" cy="70" r={radius} fill="none" stroke="var(--color-border)" strokeWidth={stroke} />
-              <circle cx="70" cy="70" r={radius} fill="none" stroke={ringColor} strokeWidth={stroke} strokeDasharray={`${dash.toFixed(1)} ${circ.toFixed(1)}`} strokeLinecap="round" transform="rotate(-90 70 70)" style={{ transition: 'stroke-dasharray 0.4s ease' }} />
+              <circle cx="70" cy="70" r={radius} fill="none" stroke={ringColor} strokeWidth={stroke}
+                strokeDasharray={`${dash.toFixed(1)} ${circ.toFixed(1)}`}
+                strokeLinecap="round" transform="rotate(-90 70 70)"
+                style={{ transition: 'stroke-dasharray 0.4s ease' }} />
             </svg>
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: '26px', fontWeight: '600', color: 'var(--color-cyan)' }}>{waterToday >= 1000 ? (waterToday / 1000).toFixed(1) + 'L' : waterToday + 'ml'}</div>
-              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{goalReached ? '✅ Goal met!' : `of ${waterGoal >= 1000 ? (waterGoal / 1000).toFixed(1) + 'L' : waterGoal + 'ml'}`}</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '26px', fontWeight: '600', color: 'var(--color-cyan)' }}>
+                {waterToday >= 1000 ? (waterToday / 1000).toFixed(1) + 'L' : waterToday + 'ml'}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                {goalReached ? '✅ Goal met!' : `of ${waterGoal >= 1000 ? (waterGoal / 1000).toFixed(1) + 'L' : waterGoal + 'ml'}`}
+              </div>
             </div>
           </div>
           <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{Math.round(waterPct * 100)}% of daily goal</div>
         </div>
 
-        {/* 5 glasses */}
+        {/* 5 glasses (each = 20%) */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '8px', marginBottom: '10px' }}>
           {Array.from({ length: 5 }, (_, i) => (
             <div key={i} className={goalReached ? '' : 'pressable'} onClick={() => !goalReached && setWaterGlass(i)}
@@ -667,7 +773,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           ))}
         </div>
 
-        {/* Quick add */}
+        {/* Quick add — disabled when goal reached */}
         <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', opacity: goalReached ? 0.4 : 1 }}>
           {[{ label: '+150ml', sub: 'espresso', ml: 150 }, { label: '+250ml', sub: 'glass', ml: 250 }, { label: '+330ml', sub: 'can', ml: 330 }, { label: '+500ml', sub: 'bottle', ml: 500 }, { label: '−250ml', sub: 'undo', ml: -250 }].map(b => (
             <button key={b.ml} className={goalReached ? '' : 'pressable'} onClick={() => !goalReached && updateWater(b.ml)} disabled={goalReached}
@@ -689,8 +795,14 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         {latestWeight && (
           <div className="card" style={{ marginBottom: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: '32px', fontWeight: '600' }}>{latestWeight.value} <span style={{ fontSize: '14px', color: 'var(--color-text-muted)', fontFamily: 'inherit' }}>kg</span></span>
-              {weightChange !== null && <span style={{ fontSize: '13px', fontWeight: '500', padding: '4px 10px', borderRadius: '20px', background: weightChange > 0 ? 'var(--color-primary-pale)' : 'var(--color-red-pale)', color: weightChange > 0 ? 'var(--color-primary)' : 'var(--color-red)' }}>{weightChange > 0 ? '+' : ''}{weightChange} kg</span>}
+              <span style={{ fontFamily: 'var(--font-display)', fontSize: '32px', fontWeight: '600' }}>
+                {latestWeight.value} <span style={{ fontSize: '14px', color: 'var(--color-text-muted)', fontFamily: 'inherit' }}>kg</span>
+              </span>
+              {weightChange !== null && (
+                <span style={{ fontSize: '13px', fontWeight: '500', padding: '4px 10px', borderRadius: '20px', background: weightChange > 0 ? 'var(--color-primary-pale)' : 'var(--color-red-pale)', color: weightChange > 0 ? 'var(--color-primary)' : 'var(--color-red)' }}>
+                  {weightChange > 0 ? '+' : ''}{weightChange} kg
+                </span>
+              )}
             </div>
             {weightGoal && weightLog[0] && (
               <div>
@@ -698,7 +810,8 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                   <div style={{ height: '100%', background: 'var(--color-primary)', borderRadius: '3px', transition: 'width 0.6s ease', width: `${Math.min(Math.abs((latestWeight.value - weightLog[0].value) / (weightGoal - weightLog[0].value || 1)) * 100, 100)}%` }} />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--color-primary)', opacity: .8 }}>
-                  <span>{weightLog[0].value} kg start</span><span>{weightGoal} kg goal</span>
+                  <span>{weightLog[0].value} kg start</span>
+                  <span>{weightGoal} kg goal</span>
                 </div>
               </div>
             )}
@@ -712,7 +825,9 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
               placeholder={latestWeight?.value?.toString() || '75.0'}
               className="input" style={{ flex: 1, fontSize: '18px', fontWeight: '600', textAlign: 'center' as const, fontFamily: 'var(--font-display)' }} />
             <button className="pressable" onClick={logWeight}
-              style={{ padding: '10px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>Log</button>
+              style={{ padding: '10px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+              Log
+            </button>
           </div>
         </div>
 
@@ -720,14 +835,18 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           <div className="card">
             <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '10px' }}>Recent entries</div>
             {[...weightLog].reverse().slice(0, 7).map((entry: any, i: number, arr: any[]) => {
-              const prev = arr[i + 1]; const diff = prev ? Math.round((entry.value - prev.value) * 10) / 10 : null
+              const prev = arr[i + 1]
+              const diff = prev ? Math.round((entry.value - prev.value) * 10) / 10 : null
               const d = new Date(entry.logged_date + 'T12:00:00')
               return (
                 <div key={entry.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: `0.5px solid var(--color-border)` }}>
                   <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
                   <span style={{ fontSize: '15px', fontWeight: '600' }}>{entry.value} kg</span>
-                  <span style={{ fontSize: '12px', fontWeight: '500', color: diff !== null ? (diff > 0 ? 'var(--color-primary)' : 'var(--color-red)') : 'var(--color-text-muted)' }}>{diff !== null ? (diff > 0 ? '+' : '') + diff : '—'}</span>
-                  <button className="pressable" onClick={async () => { try { await deleteWeightLog(user.id, entry.id); await loadWeight() } catch(e){} }} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>×</button>
+                  <span style={{ fontSize: '12px', fontWeight: '500', color: diff !== null ? (diff > 0 ? 'var(--color-primary)' : 'var(--color-red)') : 'var(--color-text-muted)' }}>
+                    {diff !== null ? (diff > 0 ? '+' : '') + diff : '—'}
+                  </span>
+                  <button className="pressable" onClick={async () => { try { await deleteWeightLog(user.id, entry.id); await loadWeight() } catch(e){} }}
+                    style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>×</button>
                 </div>
               )
             })}
@@ -746,7 +865,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
               <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--color-primary-pale)', border: `1px solid var(--color-primary-border)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>🤖</div>
               <div style={{ background: 'var(--color-surface)', border: `1px solid var(--color-border)`, borderRadius: '16px', borderBottomLeftRadius: '4px', padding: '14px', maxWidth: '80%' }}>
                 <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-primary-light)', marginBottom: '4px' }}>Planify Coach</div>
-                <div style={{ fontSize: '13px', lineHeight: '1.6' }}>Hi! I'm your personal nutrition coach 🥗 Ask me anything — meal ideas, macro advice, whether a food fits your goal, or anything nutrition-related!{profile?.tdee ? ` Your daily target is ${profile.tdee} kcal.` : ''}</div>
+                <div style={{ fontSize: '13px', lineHeight: '1.6' }}>
+                  Hi! I'm your personal nutrition coach 🥗 Ask me anything — meal ideas, macro advice, whether a food fits your goal, or anything nutrition-related!
+                  {profile?.tdee ? ` Your daily target is ${profile.tdee} kcal.` : ''}
+                </div>
               </div>
             </div>
           )}
@@ -807,9 +929,12 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Email</span>
             <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--color-text)' }}>{user.email}</span>
           </div>
-          <div className="card pressable" onClick={() => setEditModalOpen('tdee')} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', padding: '11px 14px', cursor: 'pointer' }}>
+          <div className="card pressable" onClick={() => setEditModalOpen('tdee')}
+            style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', padding: '11px 14px', cursor: 'pointer' }}>
             <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Calorie target</span>
-            <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--color-primary)' }}>{profile?.tdee ? `${profile.tdee} kcal` : 'Not calculated'} →</span>
+            <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--color-primary)' }}>
+              {profile?.tdee ? `${profile.tdee} kcal` : 'Not calculated'} →
+            </span>
           </div>
         </div>
 
@@ -821,7 +946,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           <div key={section.key} style={{ marginBottom: '1.25rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-text-muted)', textTransform: 'uppercase' as const, letterSpacing: '.08em' }}>{section.label}</div>
-              <button className="pressable" onClick={() => { setEditProfile({ ...profile }); setEditModalOpen(section.key) }} style={{ fontSize: '12px', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '500', fontFamily: 'inherit' }}>Edit →</button>
+              <button className="pressable" onClick={() => { setEditProfile({ ...profile }); setEditModalOpen(section.key) }}
+                style={{ fontSize: '12px', color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: '500', fontFamily: 'inherit' }}>
+                Edit →
+              </button>
             </div>
             {section.rows.map(row => (
               <div key={row.k} className="card" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', padding: '11px 14px' }}>
@@ -870,17 +998,14 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   return (
     <div style={{ maxWidth: '420px', margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--color-bg)', transition: 'background var(--transition-slow)' }}>
 
-      {/* Header */}
+      {/* Minimal header — only logo + avatar */}
       <div style={{ padding: '1rem 1.25rem .75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid var(--color-border-subtle)` }}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: '600', color: 'var(--color-primary)' }}>
           Plan<span style={{ fontStyle: 'italic', fontWeight: '300' }}>ify</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div className="pressable" style={{ width: '34px', height: '34px', borderRadius: '50%', border: `1.5px solid var(--color-border)`, background: 'var(--color-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', cursor: 'pointer' }}>🔔</div>
-          <div className="pressable" onClick={() => switchTab('profile')}
-            style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-light))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(45,106,79,0.25)' }}>
-            {profile?.avatar || avatar || '🥗'}
-          </div>
+        <div className="pressable" onClick={() => switchTab('profile')}
+          style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-light))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(45,106,79,0.25)' }}>
+          {profile?.avatar || avatar || '🥗'}
         </div>
       </div>
 
@@ -902,12 +1027,12 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: tab === 'assist' ? 'hidden' : 'auto', display: 'flex', flexDirection: 'column' }}>
-        {tab === 'home' && renderHome()}
-        {tab === 'meals' && renderMeals()}
+        {tab === 'home'    && renderHome()}
+        {tab === 'meals'   && renderMeals()}
         {tab === 'tracker' && renderTracker()}
         {tab === 'grocery' && renderGrocery()}
-        {tab === 'health' && renderHealth()}
-        {tab === 'assist' && renderAssist()}
+        {tab === 'health'  && renderHealth()}
+        {tab === 'assist'  && renderAssist()}
         {tab === 'profile' && renderProfile()}
       </div>
 
@@ -955,7 +1080,6 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         </div>
         <input value={avoidInput} onChange={e => setAvoidInput(e.target.value)} placeholder="Anything to avoid?" className="input" style={{ marginBottom: '.75rem' }} />
 
-        {/* Meal suggestions with heart button */}
         {mealSuggestions.map((meal: any, i: number) => (
           <div key={i} className="anim-fade-slide" style={{ background: 'var(--color-primary-pale)', border: `1.5px solid var(--color-primary-border)`, borderRadius: '12px', padding: '12px', marginBottom: '8px', position: 'relative' as const }}>
             <div className="pressable" onClick={() => selectMeal(meal)}>
@@ -971,13 +1095,15 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             </div>
             <button className="pressable" onClick={async (e) => { e.stopPropagation(); await handleSaveRecipe(meal) }}
               style={{ position: 'absolute' as const, top: '10px', right: '10px', background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', lineHeight: 1 }}
-              title="Save recipe">
-              🤍
-            </button>
+              title="Save recipe">🤍</button>
           </div>
         ))}
 
-        {mealSuggestions.length > 0 && <div style={{ fontSize: '12px', color: 'var(--color-primary-light)', textAlign: 'center' as const, marginBottom: '8px' }}>Tap a meal to add it · 🤍 to save it</div>}
+        {mealSuggestions.length > 0 && (
+          <div style={{ fontSize: '12px', color: 'var(--color-primary-light)', textAlign: 'center' as const, marginBottom: '8px' }}>
+            Tap a meal to add it · 🤍 to save it
+          </div>
+        )}
 
         <button className="pressable" onClick={getSuggestions} disabled={suggestLoading}
           style={{ width: '100%', padding: '13px', background: suggestLoading ? 'var(--color-border)' : 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: '600', cursor: suggestLoading ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
@@ -998,7 +1124,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             </div>
           ))}
         </div>
-        {/* Using refs — fixes keyboard closing bug */}
+        {/* Refs prevent keyboard close */}
         <input ref={foodNameRef} placeholder="Food name (e.g. banana, oatmeal)" className="input" style={{ marginBottom: '.75rem' }} />
         <input ref={foodPortionRef} placeholder="Portion (e.g. 1 cup, 100g)" className="input" style={{ marginBottom: '.75rem' }} />
         {logResult && (
@@ -1014,25 +1140,62 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           style={{ width: '100%', padding: '10px', background: 'transparent', border: 'none', fontSize: '13px', color: 'var(--color-text-muted)', cursor: 'pointer', marginTop: '8px', fontFamily: 'inherit' }}>Cancel</button>
       </Modal>
 
-      {/* ── ACTIVITY MODAL ── */}
+      {/* ── ACTIVITY MODAL — dropdown style ── */}
       <Modal open={actModalOpen} onClose={() => setActModalOpen(false)} title="Log activity" subtitle="Add exercise to track calories burned.">
         <SL>Activity type</SL>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '1rem' }}>
-          {Object.entries(ACT_LABELS).map(([v, l]) => (
-            <div key={v} className="pressable" onClick={() => setActType(v)}
-              style={{ padding: '10px', borderRadius: '10px', border: `1.5px solid ${actType === v ? 'var(--color-primary-light)' : 'var(--color-border)'}`, background: actType === v ? 'var(--color-primary-pale)' : 'var(--color-surface)', cursor: 'pointer', fontSize: '13px', fontWeight: '500', color: actType === v ? 'var(--color-primary)' : 'var(--color-text-muted)', textAlign: 'center' as const, transition: 'all 0.18s' }}>
-              {ACT_ICONS[v]} {l}
-            </div>
-          ))}
+        {/* Dropdown select */}
+        <div style={{ position: 'relative' as const, marginBottom: '1rem' }}>
+          <select
+            value={actType || ''}
+            onChange={e => {
+              const val = e.target.value
+              setActType(val || null)
+              const dur = parseInt(actDurRef.current?.value || '0')
+              if (val && dur) {
+                const act = ACTIVITIES.find(a => a.value === val)
+                setActBurnPreview(Math.round((act?.burn || 6) * dur))
+              } else {
+                setActBurnPreview(null)
+              }
+            }}
+            style={{ width: '100%', padding: '12px 40px 12px 14px', borderRadius: '12px', border: `1.5px solid ${actType ? 'var(--color-primary-light)' : 'var(--color-border)'}`, background: actType ? 'var(--color-primary-pale)' : 'var(--color-surface)', fontSize: '14px', color: actType ? 'var(--color-primary)' : 'var(--color-text-muted)', fontFamily: 'inherit', outline: 'none', appearance: 'none', cursor: 'pointer', transition: 'all 0.18s' }}>
+            <option value="">Select an activity...</option>
+            {ACTIVITIES.map(a => (
+              <option key={a.value} value={a.value}>{a.icon} {a.label} (~{a.burn} kcal/min)</option>
+            ))}
+          </select>
+          <div style={{ position: 'absolute' as const, right: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: 'var(--color-text-muted)', pointerEvents: 'none' }}>▼</div>
         </div>
+
+        {/* Selected activity preview */}
+        {actType && (
+          <div className="anim-scale-in" style={{ background: 'var(--color-primary-pale)', border: `1px solid var(--color-primary-border)`, borderRadius: '10px', padding: '10px 14px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '24px' }}>{ACTIVITIES.find(a => a.value === actType)?.icon}</span>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: '500', color: 'var(--color-primary)' }}>{ACTIVITIES.find(a => a.value === actType)?.label}</div>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>~{ACTIVITIES.find(a => a.value === actType)?.burn} kcal per minute</div>
+            </div>
+          </div>
+        )}
+
         <input ref={actDurRef} type="number" placeholder="Duration in minutes (e.g. 45)"
-          onChange={e => { const dur = parseInt(e.target.value || '0'); setActBurnPreview(actType && dur ? Math.round((ACT_BURNS[actType] || 6) * dur) : null) }}
+          onChange={e => {
+            const dur = parseInt(e.target.value || '0')
+            if (actType && dur) {
+              const act = ACTIVITIES.find(a => a.value === actType)
+              setActBurnPreview(Math.round((act?.burn || 6) * dur))
+            } else {
+              setActBurnPreview(null)
+            }
+          }}
           className="input" style={{ marginBottom: '.75rem' }} />
+
         {actBurnPreview !== null && (
           <div className="anim-scale-in" style={{ background: 'var(--color-red-pale)', border: `1px solid var(--color-red-border)`, borderRadius: '8px', padding: '8px 12px', fontSize: '13px', color: 'var(--color-red)', marginBottom: '.75rem' }}>
             Estimated burn: ~{actBurnPreview} kcal
           </div>
         )}
+
         <button className="pressable" onClick={logActivity} disabled={!actType}
           style={{ width: '100%', padding: '13px', background: !actType ? 'var(--color-border)' : 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: '600', cursor: !actType ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
           Add activity
