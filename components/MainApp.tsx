@@ -15,6 +15,125 @@ import {
 import Dashboard from './Dashboard'
 import Modal from './Modal'
 
+// ── INLINE TDEE CALCULATOR (used inside modal) ──
+function TDEEInlineCalculator({ goal, currentTdee, onComplete, onCancel }: any) {
+  const [sex, setSex] = useState<'male' | 'female' | null>(null)
+  const [age, setAge] = useState('')
+  const [weight, setWeight] = useState('')
+  const [height, setHeight] = useState('')
+  const [activity, setActivity] = useState<number | null>(null)
+  const [result, setResult] = useState<any>(null)
+
+  const ACTIVITY_LEVELS = [
+    { value: 1.2,   label: 'Sedentary',        desc: 'Desk job, little exercise', icon: '🪑' },
+    { value: 1.375, label: 'Lightly active',    desc: '1–3 workouts/week',         icon: '🚶' },
+    { value: 1.55,  label: 'Moderately active', desc: '3–5 workouts/week',         icon: '🏃' },
+    { value: 1.725, label: 'Very active',        desc: '6–7 workouts/week',         icon: '💪' },
+    { value: 1.9,   label: 'Athlete',           desc: 'Twice daily training',      icon: '🏆' },
+  ]
+  const GOAL_ADJ: Record<string, number> = { bulk: 300, cut: -400, maintain: 0, energy: 0, gut: 0 }
+  const GOAL_MAC: Record<string, { protein: number, fat: number }> = {
+    bulk: { protein: 2.2, fat: 0.9 }, cut: { protein: 2.4, fat: 0.8 },
+    maintain: { protein: 1.8, fat: 0.9 }, energy: { protein: 1.8, fat: 1.0 }, gut: { protein: 1.6, fat: 1.0 },
+  }
+
+  function calculate() {
+    const w = parseFloat(weight), h = parseFloat(height), a = parseInt(age)
+    if (!w || !h || !a || !sex || !activity) return
+    const bmr = sex === 'male' ? 10*w + 6.25*h - 5*a + 5 : 10*w + 6.25*h - 5*a - 161
+    const tdee = Math.round(bmr * activity)
+    const adj = GOAL_ADJ[goal || 'maintain'] || 0
+    const targetCals = tdee + adj
+    const mac = GOAL_MAC[goal || 'maintain']
+    const protein = Math.round(w * mac.protein)
+    const fat = Math.round(w * mac.fat)
+    const carbs = Math.round(Math.max((targetCals - protein*4 - fat*9) / 4, 50))
+    setResult({ tdee, targetCals, protein, carbs, fat, bmr: Math.round(bmr) })
+  }
+
+  if (result) return (
+    <div>
+      <div style={{ background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-light))', borderRadius: '14px', padding: '1.25rem', marginBottom: '12px', textAlign: 'center' as const, color: '#fff' }}>
+        <div style={{ fontSize: '12px', opacity: .8, marginBottom: '4px' }}>New daily calorie target</div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: '48px', fontWeight: '600', lineHeight: 1 }}>{result.targetCals}</div>
+        <div style={{ fontSize: '12px', opacity: .7, marginTop: '4px' }}>kcal / day</div>
+        {currentTdee && <div style={{ fontSize: '11px', opacity: .6, marginTop: '6px' }}>Previously: {currentTdee} kcal</div>}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+        {[
+          { label: 'Protein', val: result.protein + 'g', color: 'var(--color-primary)' },
+          { label: 'Carbs', val: result.carbs + 'g', color: 'var(--color-blue)' },
+          { label: 'Fat', val: result.fat + 'g', color: 'var(--color-amber)' },
+        ].map(m => (
+          <div key={m.label} style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '10px', padding: '10px', textAlign: 'center' as const }}>
+            <div style={{ fontSize: '18px', fontWeight: '600', color: m.color }}>{m.val}</div>
+            <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px', textTransform: 'uppercase' as const }}>{m.label}</div>
+          </div>
+        ))}
+      </div>
+      <button className="pressable" onClick={() => onComplete({ tdee: result.targetCals, protein: result.protein, carbs: result.carbs, fat: result.fat })}
+        style={{ width: '100%', padding: '13px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', marginBottom: '8px' }}>
+        Save new targets
+      </button>
+      <button className="pressable" onClick={() => setResult(null)}
+        style={{ width: '100%', padding: '10px', background: 'transparent', border: 'none', fontSize: '13px', color: 'var(--color-text-muted)', cursor: 'pointer', fontFamily: 'inherit' }}>
+        ← Recalculate
+      </button>
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={{ marginBottom: '1rem' }}>
+        <div style={{ fontSize: '12px', fontWeight: '500', color: 'var(--color-text-muted)', marginBottom: '6px' }}>Biological sex</div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {(['male', 'female'] as const).map(v => (
+            <div key={v} className="pressable" onClick={() => setSex(v)}
+              style={{ flex: 1, padding: '10px', borderRadius: '10px', border: `1.5px solid ${sex === v ? 'var(--color-primary)' : 'var(--color-border)'}`, background: sex === v ? 'var(--color-primary-pale)' : 'var(--color-surface)', cursor: 'pointer', textAlign: 'center' as const, fontSize: '13px', fontWeight: '500', color: sex === v ? 'var(--color-primary)' : 'var(--color-text-muted)', transition: 'all .18s' }}>
+              {v === 'male' ? '♂️ Male' : '♀️ Female'}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '1rem' }}>
+        {[
+          { label: 'Age', placeholder: '25', val: age, set: setAge },
+          { label: 'Weight (kg)', placeholder: '75', val: weight, set: setWeight },
+          { label: 'Height (cm)', placeholder: '175', val: height, set: setHeight },
+        ].map(f => (
+          <div key={f.label}>
+            <div style={{ fontSize: '11px', fontWeight: '500', color: 'var(--color-text-muted)', marginBottom: '4px' }}>{f.label}</div>
+            <input type="number" placeholder={f.placeholder} value={f.val} onChange={e => f.set(e.target.value)}
+              className="input" style={{ marginBottom: 0, textAlign: 'center' as const, fontSize: '18px', fontWeight: '600', padding: '10px' }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ marginBottom: '1rem' }}>
+        <div style={{ fontSize: '12px', fontWeight: '500', color: 'var(--color-text-muted)', marginBottom: '8px' }}>Activity level</div>
+        {ACTIVITY_LEVELS.map(level => (
+          <div key={level.value} className="pressable" onClick={() => setActivity(level.value)}
+            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '10px', border: `1.5px solid ${activity === level.value ? 'var(--color-primary)' : 'var(--color-border)'}`, background: activity === level.value ? 'var(--color-primary-pale)' : 'var(--color-surface)', cursor: 'pointer', marginBottom: '6px', transition: 'all .18s' }}>
+            <span>{level.icon}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '13px', fontWeight: '500', color: activity === level.value ? 'var(--color-primary)' : 'var(--color-text)' }}>{level.label}</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{level.desc}</div>
+            </div>
+            <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: `2px solid ${activity === level.value ? 'var(--color-primary)' : 'var(--color-border)'}`, background: activity === level.value ? 'var(--color-primary)' : 'transparent', flexShrink: 0 }} />
+          </div>
+        ))}
+      </div>
+      <button className="pressable" onClick={calculate} disabled={!sex || !age || !weight || !height || !activity}
+        style={{ width: '100%', padding: '13px', background: (!sex || !age || !weight || !height || !activity) ? 'var(--color-border)' : 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: '600', cursor: (!sex || !age || !weight || !height || !activity) ? 'not-allowed' : 'pointer', fontFamily: 'inherit', marginBottom: '8px' }}>
+        Calculate →
+      </button>
+      <button className="pressable" onClick={onCancel}
+        style={{ width: '100%', padding: '10px', background: 'transparent', border: 'none', fontSize: '13px', color: 'var(--color-text-muted)', cursor: 'pointer', fontFamily: 'inherit' }}>
+        Cancel
+      </button>
+    </div>
+  )
+}
+
 // ── CONSTANTS ──
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const GL: Record<string, string> = { bulk: 'Bulking 💪', cut: 'Cutting 🔥', maintain: 'Balanced ⚖️', energy: 'Energy ⚡', gut: 'Gut health 🌿' }
@@ -160,7 +279,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   // Health
   const [waterGoal] = useState(profile?.water_goal || 2500)
   const [weightInput, setWeightInput] = useState('')
-  const [weightGoal] = useState(profile?.weight_goal || 75)
+  const [weightGoal] = useState(profile?.weight_goal || null)
 
   // Profile
   const [editProfile, setEditProfile] = useState<any>({ ...profile })
@@ -189,7 +308,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   }
   async function loadWater() {
     try {
-      const data = await getWaterLog(user.id, dateKey(new Date(Date.now() - 30 * 86400000)))
+      const data = await getWaterLog(user.id, dateKey(new Date(Date.now() - 365 * 86400000)))
       const map: Record<string, number> = {}
       data.forEach((w: any) => { map[w.logged_date] = w.amount })
       setWaterLog(map)
@@ -1275,6 +1394,22 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           style={{ width: '100%', padding: '13px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>Save changes</button>
         <button className="pressable" onClick={() => setEditModalOpen(null)}
           style={{ width: '100%', padding: '10px', background: 'transparent', border: 'none', fontSize: '13px', color: 'var(--color-text-muted)', cursor: 'pointer', marginTop: '8px', fontFamily: 'inherit' }}>Cancel</button>
+      </Modal>
+
+      {/* ── TDEE RECALCULATE MODAL ── */}
+      <Modal open={editModalOpen === 'tdee'} onClose={() => setEditModalOpen(null)} title="Recalculate calorie target" subtitle="Update your daily targets based on current stats.">
+        <TDEEInlineCalculator
+          goal={profile?.goal}
+          currentTdee={profile?.tdee}
+          onComplete={async (targets) => {
+            try {
+              const updated = await saveProfile(user.id, { ...profile, tdee: targets.tdee, protein_target: targets.protein, carbs_target: targets.carbs, fat_target: targets.fat })
+              onProfileUpdate(updated)
+              setEditModalOpen(null)
+            } catch(e) { console.error(e) }
+          }}
+          onCancel={() => setEditModalOpen(null)}
+        />
       </Modal>
 
       {/* ── SAVED TOAST ── */}

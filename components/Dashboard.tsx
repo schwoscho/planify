@@ -197,10 +197,11 @@ export default function Dashboard({
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
 
         {/* Water card */}
-        <div className="card pressable" onClick={() => onSwitchTab('health')} style={{ cursor: 'pointer' }}>
+        <div className="card pressable" onClick={() => onSwitchTab('health')}
+          style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' as const }}>
           <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-text-muted)', textTransform: 'uppercase' as const, letterSpacing: '.07em', marginBottom: '8px' }}>💧 Water</div>
-          <div style={{ textAlign: 'center' as const, marginBottom: '6px' }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: '600', color: goalReached ? 'var(--color-cyan)' : 'var(--color-cyan)' }}>
+          <div style={{ marginBottom: '6px' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: '600', color: 'var(--color-cyan)' }}>
               {waterToday >= 1000 ? (waterToday / 1000).toFixed(1) + 'L' : waterToday + 'ml'}
             </div>
             <div style={{ fontSize: '11px', color: goalReached ? 'var(--color-primary)' : 'var(--color-text-muted)', marginTop: '2px' }}>
