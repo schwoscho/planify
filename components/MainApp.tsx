@@ -561,7 +561,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           <div>
             {!savedRecipes.length ? (
               <div className="empty-state">
-                <div className="empty-icon">❤️</div>
+                <img src="/images/empty-saved.png" alt="" style={{ width: '120px', height: 'auto', marginBottom: '12px', opacity: 0.85 }} />
                 <div className="empty-title">No saved recipes yet</div>
                 <div className="empty-desc">When Planify suggests a meal you love, tap 🤍 to save it here.</div>
               </div>
@@ -805,9 +805,9 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         </div>
         {!grocery.length ? (
           <div className="empty-state">
-            <div className="empty-icon">🛒</div>
+            <img src="/images/empty-grocery.png" alt="" style={{ width: '120px', height: 'auto', marginBottom: '12px', opacity: 0.85 }} />
             <div className="empty-title">Your list is empty</div>
-            <div className="empty-desc">Add meals and tap "Add to grocery"</div>
+            <div className="empty-desc">Add meals and tap "Add to grocery" to build your shopping list.</div>
           </div>
         ) : Object.entries(groups).map(([section, items]) => (
           <div key={section} style={{ marginBottom: '1rem' }}>
@@ -847,7 +847,12 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           borderRadius: '16px', padding: '1.25rem', marginBottom: '12px', textAlign: 'center' as const, color: '#fff',
           boxShadow: waterStreak > 0 ? '0 4px 20px rgba(230,126,34,0.3)' : 'none',
         }}>
-          <div className={waterStreak >= 1 ? 'anim-pulse' : ''} style={{ fontSize: '40px', marginBottom: '4px' }}>{waterStreak >= 1 ? '🔥' : '💤'}</div>
+          {waterStreak >= 7 ? (
+            <img src="/images/streak-celebration.png" alt="🏆" style={{ width: '80px', height: '80px', objectFit: 'contain', marginBottom: '4px' }} />
+          ) : (
+            <div className={waterStreak >= 1 ? 'anim-pulse' : ''} style={{ fontSize: '40px', marginBottom: '4px' }}>{waterStreak >= 1 ? '🔥' : '💤'}</div>
+          )}
+
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '44px', fontWeight: '600', lineHeight: 1 }}>{waterStreak}</div>
           <div style={{ fontSize: '14px', opacity: .85, marginTop: '4px' }}>day streak</div>
           <div style={{ fontSize: '12px', opacity: .65, marginTop: '4px' }}>
@@ -981,7 +986,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {!chatHistory.length && (
             <div className="anim-fade-slide" style={{ alignSelf: 'flex-start', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--color-primary-pale)', border: `1px solid var(--color-primary-border)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>🤖</div>
+        <img src="/images/coach.png" alt="Planify Coach" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
               <div style={{ background: 'var(--color-surface)', border: `1px solid var(--color-border)`, borderRadius: '16px', borderBottomLeftRadius: '4px', padding: '14px', maxWidth: '80%' }}>
                 <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-primary-light)', marginBottom: '4px' }}>Planify Coach</div>
                 <div style={{ fontSize: '13px', lineHeight: '1.6' }}>
@@ -994,7 +999,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           {chatHistory.map((msg: any, i: number) => (
             <div key={i} className="anim-fade-slide" style={{ alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', display: 'flex', gap: '10px', alignItems: 'flex-start', maxWidth: '85%' }}>
               {msg.role === 'assistant' && (
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--color-primary-pale)', border: `1px solid var(--color-primary-border)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>🤖</div>
+                <img src="/images/coach.png" alt="Planify Coach" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
               )}
               <div style={{ padding: '10px 14px', borderRadius: '16px', fontSize: '13px', lineHeight: '1.6', background: msg.role === 'user' ? 'var(--color-primary)' : 'var(--color-surface)', color: msg.role === 'user' ? '#fff' : 'var(--color-text)', border: msg.role === 'user' ? 'none' : `1px solid var(--color-border)`, borderBottomRightRadius: msg.role === 'user' ? '4px' : '16px', borderBottomLeftRadius: msg.role === 'user' ? '16px' : '4px' }}>
                 {msg.role === 'assistant' && <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-primary-light)', marginBottom: '4px' }}>Planify Coach</div>}
@@ -1004,7 +1009,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           ))}
           {chatLoading && (
             <div className="anim-fade-slide" style={{ alignSelf: 'flex-start', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--color-primary-pale)', border: `1px solid var(--color-primary-border)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>🤖</div>
+              <img src="/images/coach.png" alt="Planify Coach" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
               <div style={{ background: 'var(--color-surface)', border: `1px solid var(--color-border)`, borderRadius: '16px', borderBottomLeftRadius: '4px', padding: '14px' }}>
                 <div className="loading-dots"><div className="loading-dot" /><div className="loading-dot" /><div className="loading-dot" /></div>
               </div>
@@ -1119,9 +1124,12 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
       {/* Minimal header — only logo + avatar */}
       <div style={{ padding: '1rem 1.25rem .75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid var(--color-border-subtle)` }}>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: '600', color: 'var(--color-primary)' }}>
-          Plan<span style={{ fontStyle: 'italic', fontWeight: '300' }}>ify</span>
-        </div>
+        <img
+          src="/images/logo.png"
+          alt="Planify"
+          style={{ height: '28px', width: 'auto', objectFit: 'contain' }}
+        />
+
         <div className="pressable" onClick={() => switchTab('profile')}
           style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-light))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(45,106,79,0.25)' }}>
           {profile?.avatar || avatar || '🥗'}
