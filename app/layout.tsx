@@ -30,6 +30,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-title" content="Planify" />
         <link rel="apple-touch-icon" href="/images/icon.png" />
         <link rel="icon" type="image/png" href="/images/icon.png" />
+        {/* Tabler Icons */}
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
         <script dangerouslySetInnerHTML={{
           __html: `
             (function() {
