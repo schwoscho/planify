@@ -33,8 +33,6 @@ export default function Dashboard({ user, profile, meals, foodLog, activityLog, 
   const dash = pct * circ
   const ringColor = net > tgt*1.1 ? 'var(--color-red)' : net > tgt*0.85 ? 'var(--color-primary)' : 'var(--color-blue)'
   const filledGlasses = Math.min(5, Math.round(waterPct * 5))
-  const weekCals = DAYS.map((_,i) => meals[i]?.macros?.calories || 0)
-  const maxCal = Math.max(...weekCals, tgt, 1)
 
   return (
     <div className="anim-fade-slide" style={{padding:'1rem 1.25rem 1rem'}}>
@@ -84,28 +82,6 @@ export default function Dashboard({ user, profile, meals, foodLog, activityLog, 
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Weekly chart */}
-        <div style={{marginTop:'14px',paddingTop:'12px',borderTop:'0.5px solid var(--color-border)'}}>
-          <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.06em',marginBottom:'8px'}}>This week</div>
-          <div style={{display:'flex',gap:'5px',alignItems:'flex-end',height:'48px'}}>
-            {DAYS.map((d,i)=>{
-              const cal = weekCals[i]
-              const barH = cal ? Math.round((cal/maxCal)*40) : 0
-              const isToday = i === activeDay
-              const col = cal > tgt*1.1 ? 'var(--color-red)' : cal > tgt*0.85 ? 'var(--color-primary)' : cal > 0 ? 'var(--color-amber)' : 'var(--color-border)'
-              return (
-                <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
-                  <div style={{width:'100%',background:'var(--color-border)',borderRadius:'4px',height:'40px',display:'flex',alignItems:'flex-end',overflow:'hidden'}}>
-                    <div style={{width:'100%',height:`${barH}px`,background:col,borderRadius:'4px',transition:'height 0.4s ease'}}/>
-                  </div>
-                  <div style={{fontSize:'9px',color:isToday?'var(--color-primary)':'var(--color-text-muted)',fontWeight:isToday?'700':'400',textTransform:'uppercase' as const}}>{d[0]}</div>
-                </div>
-              )
-            })}
-          </div>
-          <div style={{fontSize:'10px',color:'var(--color-text-muted)',marginTop:'4px',textAlign:'right' as const}}>Target: {tgt} kcal/day</div>
         </div>
 
         {todayMeal?.macros&&(

@@ -133,16 +133,20 @@ function SL({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize:'11px', fontWeight:'600', color:'var(--color-text-muted)', textTransform:'uppercase' as const, letterSpacing:'.08em', marginBottom:'8px' }}>{children}</div>
 }
 
-function TDEEInline({ goal, currentTdee, onComplete, onCancel }: any) {
-  const [sex, setSex] = useState<'male'|'female'|null>(null)
-  const [age, setAge] = useState(''); const [weight, setWeight] = useState(''); const [height, setHeight] = useState('')
-  const [activity, setActivity] = useState<number|null>(null); const [result, setResult] = useState<any>(null)
+function TDEEInline({ goal, currentTdee, savedStats, onComplete, onCancel }: any) {
+  // Pre-fill with last saved stats if available
+  const [sex, setSex] = useState<'male'|'female'|null>(savedStats?.sex||null)
+  const [age, setAge] = useState(savedStats?.age?String(savedStats.age):'')
+  const [weight, setWeight] = useState(savedStats?.weight?String(savedStats.weight):'')
+  const [height, setHeight] = useState(savedStats?.height?String(savedStats.height):'')
+  const [activity, setActivity] = useState<number|null>(savedStats?.activity||null)
+  const [result, setResult] = useState<any>(null)
   const AL = [
-    { value:1.2, label:'Sedentary', desc:'Desk job, little exercise' },
-    { value:1.375, label:'Lightly active', desc:'1–3 workouts/week' },
-    { value:1.55, label:'Moderately active', desc:'3–5 workouts/week' },
-    { value:1.725, label:'Very active', desc:'6–7 workouts/week' },
-    { value:1.9, label:'Athlete', desc:'Twice daily training' },
+    { value:1.2,   label:'Sedentary',         desc:'Desk job, little exercise' },
+    { value:1.375, label:'Lightly active',     desc:'1–3 workouts/week' },
+    { value:1.55,  label:'Moderately active',  desc:'3–5 workouts/week' },
+    { value:1.725, label:'Very active',        desc:'6–7 workouts/week' },
+    { value:1.9,   label:'Athlete',            desc:'Twice daily training' },
   ]
   const GADJ: Record<string,number> = { bulk:300, cut:-400, maintain:0, energy:0, gut:0 }
   const GMAC: Record<string,{protein:number,fat:number}> = { bulk:{protein:2.2,fat:0.9}, cut:{protein:2.4,fat:0.8}, maintain:{protein:1.8,fat:0.9}, energy:{protein:1.8,fat:1.0}, gut:{protein:1.6,fat:1.0} }
@@ -153,7 +157,7 @@ function TDEEInline({ goal, currentTdee, onComplete, onCancel }: any) {
     const tdee=Math.round(bmr*activity); const adj=GADJ[goal||'maintain']||0; const tc=tdee+adj
     const mac=GMAC[goal||'maintain']; const protein=Math.round(w*mac.protein); const fat=Math.round(w*mac.fat)
     const carbs=Math.round(Math.max((tc-protein*4-fat*9)/4,50))
-    setResult({ tdee, targetCals:tc, protein, carbs, fat, bmr:Math.round(bmr) })
+    setResult({ tdee, targetCals:tc, protein, carbs, fat, bmr:Math.round(bmr), stats:{sex,age:a,weight:w,height:h,activity} })
   }
   if (result) return (
     <div>
@@ -171,7 +175,7 @@ function TDEEInline({ goal, currentTdee, onComplete, onCancel }: any) {
           </div>
         ))}
       </div>
-      <button className="pressable" onClick={() => onComplete({tdee:result.targetCals,protein:result.protein,carbs:result.carbs,fat:result.fat})} style={{ width:'100%', padding:'13px', background:'var(--color-primary)', color:'#fff', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', marginBottom:'8px' }}>Save new targets</button>
+      <button className="pressable" onClick={() => onComplete({tdee:result.targetCals,protein:result.protein,carbs:result.carbs,fat:result.fat,stats:result.stats})} style={{ width:'100%', padding:'13px', background:'var(--color-primary)', color:'#fff', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', marginBottom:'8px' }}>Save new targets</button>
       <button className="pressable" onClick={() => setResult(null)} style={{ width:'100%', padding:'10px', background:'transparent', border:'none', fontSize:'13px', color:'var(--color-text-muted)', cursor:'pointer', fontFamily:'inherit' }}>← Recalculate</button>
     </div>
   )
@@ -291,6 +295,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const [editProfile, setEditProfile] = useState<any>({ ...profile })
   const [avatar, setAvatar] = useState(profile?.avatar || '🥗')
   const [profileSubPage, setProfileSubPage] = useState<string|null>(null)
+  const [calViewOffset, setCalViewOffset] = useState(0) // 0 = current month, -1 = last month
   const [editUsername, setEditUsername] = useState(profile?.username || user?.email?.split('@')[0] || '')
   const [editPhone, setEditPhone] = useState(profile?.phone || '')
   const [accountSaving, setAccountSaving] = useState(false)
@@ -488,12 +493,6 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
   function renderTracker() {
     const rc=netCals>tgt*1.1?'var(--color-red)':netCals>tgt*0.85?'var(--color-primary)':'var(--color-blue)'
-
-    // Calendar: show previous month + current month
-    const now = new Date()
-    const calYear = now.getFullYear(), calMonth = now.getMonth()
-    const todayDate = now.getDate()
-
     const macroProtein = profile?.protein_target || Math.round(tgt*0.3/4)
     const macroCarbs = profile?.carbs_target || Math.round(tgt*0.4/4)
     const macroFat = profile?.fat_target || Math.round(tgt*0.3/9)
@@ -503,50 +502,8 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
     // Build meal cal map from current week meals
     const mealCalMap: Record<string,number> = {}
-    const mon = getMonday()
-    DAYS.forEach((_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); if(meals[i]?.macros?.calories) mealCalMap[dateKey(d)]=meals[i].macros.calories })
-
-    function renderMonth(year:number, month:number) {
-      const firstDow = new Date(year, month, 1).getDay() // 0=Sun
-      const offset = firstDow === 0 ? 6 : firstDow - 1 // Mon-first offset
-      const daysInMo = new Date(year, month+1, 0).getDate()
-      const mName = new Date(year, month, 1).toLocaleString('en-GB',{month:'long',year:'numeric'})
-      return (
-        <div key={`${year}-${month}`} style={{marginBottom:'1rem'}}>
-          <div style={{fontSize:'12px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px',display:'flex',alignItems:'center',gap:'6px'}}>
-            📅 {mName}
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'2px',marginBottom:'4px'}}>
-            {['M','T','W','T','F','S','S'].map((d,i)=>(
-              <div key={i} style={{textAlign:'center' as const,fontSize:'10px',color:'var(--color-text-muted)',fontWeight:'600',padding:'2px 0'}}>{d}</div>
-            ))}
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'3px'}}>
-            {Array.from({length:offset},(_,i)=>(<div key={`empty${i}`} style={{aspectRatio:'1'}}/>))}
-            {Array.from({length:daysInMo},(_,i)=>{
-              const day = i+1
-              const isToday = day===todayDate && month===calMonth && year===calYear
-              const dk = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
-              const cals = mealCalMap[dk]||0
-              const hasMeal = cals>0
-              const dotColor = cals>tgt*1.1?'var(--color-red)':cals>tgt*0.85?'var(--color-primary)':'var(--color-blue)'
-              return (
-                <div key={day}
-                  style={{aspectRatio:'1',borderRadius:'8px',display:'flex',flexDirection:'column' as const,alignItems:'center',justifyContent:'center',background:isToday?'var(--color-primary)':'transparent',cursor:'default'}}>
-                  <span style={{fontSize:'11px',fontWeight:isToday?'600':'400',color:isToday?'#fff':hasMeal?'var(--color-text)':'var(--color-text-muted)',lineHeight:1}}>{day}</span>
-                  {hasMeal&&!isToday&&<div style={{width:'4px',height:'4px',borderRadius:'50%',background:dotColor,marginTop:'2px'}}/>}
-                  {isToday&&hasMeal&&<div style={{width:'4px',height:'4px',borderRadius:'50%',background:'rgba(255,255,255,0.7)',marginTop:'2px'}}/>}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )
-    }
-
-    // Previous month
-    const prevMonth = calMonth === 0 ? 11 : calMonth - 1
-    const prevYear = calMonth === 0 ? calYear - 1 : calYear
+    const mon2 = getMonday()
+    DAYS.forEach((_,i)=>{ const d=new Date(mon2); d.setDate(mon2.getDate()+i); if(meals[i]?.macros?.calories) mealCalMap[dateKey(d)]=meals[i].macros.calories })
 
     return (
       <div key={tabKey} className="anim-fade-slide" style={{padding:'0 1.25rem 1rem'}}>
@@ -621,15 +578,59 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           })}
         </div>
 
-        {/* 2-month calendar */}
+        {/* Navigable single-month calendar */}
         <div className="card">
-          {renderMonth(prevYear, prevMonth)}
-          {renderMonth(calYear, calMonth)}
-          <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginTop:'4px',display:'flex',gap:'12px',flexWrap:'wrap' as const}}>
-            <span><span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-primary)',marginRight:'4px',verticalAlign:'middle'}}/>On target</span>
-            <span><span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-blue)',marginRight:'4px',verticalAlign:'middle'}}/>Under</span>
-            <span><span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-red)',marginRight:'4px',verticalAlign:'middle'}}/>Over</span>
-          </div>
+          {(() => {
+            const base = new Date()
+            base.setDate(1)
+            base.setMonth(base.getMonth() + calViewOffset)
+            const yr = base.getFullYear(), mo = base.getMonth()
+            const firstDow = new Date(yr, mo, 1).getDay()
+            const offset = firstDow === 0 ? 6 : firstDow - 1
+            const daysInMo = new Date(yr, mo+1, 0).getDate()
+            const mLabel = base.toLocaleString('en-GB',{month:'long',year:'numeric'})
+            const now2 = new Date()
+            const isCurrentMonth = yr===now2.getFullYear() && mo===now2.getMonth()
+            return (
+              <>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'10px'}}>
+                  <button onClick={()=>setCalViewOffset(o=>o-1)}
+                    style={{background:'none',border:'none',cursor:'pointer',fontSize:'18px',color:'var(--color-text-muted)',padding:'4px 8px',borderRadius:'8px',lineHeight:1}}>‹</button>
+                  <div style={{fontSize:'12px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em'}}>📅 {mLabel}</div>
+                  <button onClick={()=>setCalViewOffset(o=>Math.min(o+1,0))}
+                    style={{background:'none',border:'none',cursor:'pointer',fontSize:'18px',color:isCurrentMonth?'var(--color-border)':'var(--color-text-muted)',padding:'4px 8px',borderRadius:'8px',lineHeight:1,opacity:isCurrentMonth?0.3:1}}>›</button>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'2px',marginBottom:'4px'}}>
+                  {['M','T','W','T','F','S','S'].map((d,i)=>(
+                    <div key={i} style={{textAlign:'center' as const,fontSize:'10px',color:'var(--color-text-muted)',fontWeight:'600',padding:'2px 0'}}>{d}</div>
+                  ))}
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'3px'}}>
+                  {Array.from({length:offset},(_,i)=>(<div key={`e${i}`} style={{aspectRatio:'1'}}/>))}
+                  {Array.from({length:daysInMo},(_,i)=>{
+                    const day=i+1
+                    const isToday=day===now2.getDate()&&isCurrentMonth
+                    const dk=`${yr}-${String(mo+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+                    const cals=mealCalMap[dk]||0
+                    const hasMeal=cals>0
+                    const dotColor=cals>tgt*1.1?'var(--color-red)':cals>tgt*0.85?'var(--color-primary)':'var(--color-blue)'
+                    return (
+                      <div key={day} style={{aspectRatio:'1',borderRadius:'8px',display:'flex',flexDirection:'column' as const,alignItems:'center',justifyContent:'center',background:isToday?'var(--color-primary)':'transparent'}}>
+                        <span style={{fontSize:'11px',fontWeight:isToday?'600':'400',color:isToday?'#fff':hasMeal?'var(--color-text)':'var(--color-text-muted)',lineHeight:1}}>{day}</span>
+                        {hasMeal&&!isToday&&<div style={{width:'4px',height:'4px',borderRadius:'50%',background:dotColor,marginTop:'2px'}}/>}
+                        {isToday&&hasMeal&&<div style={{width:'4px',height:'4px',borderRadius:'50%',background:'rgba(255,255,255,0.7)',marginTop:'2px'}}/>}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginTop:'10px',display:'flex',gap:'12px',flexWrap:'wrap' as const}}>
+                  <span><span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-primary)',marginRight:'4px',verticalAlign:'middle'}}/>On target</span>
+                  <span><span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-blue)',marginRight:'4px',verticalAlign:'middle'}}/>Under</span>
+                  <span><span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-red)',marginRight:'4px',verticalAlign:'middle'}}/>Over</span>
+                </div>
+              </>
+            )
+          })()}
         </div>
       </div>
     )
@@ -926,9 +927,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         <TDEEInline
           goal={profile?.goal}
           currentTdee={profile?.tdee}
+          savedStats={profile?.body_stats}
           onComplete={async(targets:any)=>{
             try{
-              const u=await saveProfile(user.id,{...profile,tdee:targets.tdee,protein_target:targets.protein,carbs_target:targets.carbs,fat_target:targets.fat})
+              const u=await saveProfile(user.id,{...profile,tdee:targets.tdee,protein_target:targets.protein,carbs_target:targets.carbs,fat_target:targets.fat,body_stats:targets.stats})
               onProfileUpdate(u); setProfileSubPage(null)
             }catch(e){console.error(e)}
           }}
@@ -1045,7 +1047,8 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         {tab==='profile'&&renderProfile()}
       </div>
 
-      {/* Bottom nav — emoji icons */}
+      {/* Bottom nav — hidden on profile sub-pages */}
+      {!(tab==='profile' && profileSubPage) && (
       <nav className="bottom-nav">
         {TABS.map(t=>{
           const NAV_EMOJI: Record<string,string> = { home:'🏠', meals:'🥗', tracker:'📊', grocery:'🛒', health:'💧', assist:'🤖', profile:'👤' }
@@ -1058,6 +1061,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           )
         })}
       </nav>
+      )}
 
       {/* MEAL MODAL */}
       <Modal open={mealModalOpen} onClose={()=>setMealModalOpen(false)} title="Suggest a meal" subtitle={`for ${DAYS[activeDay]}${profile?.goal?' · '+GL[profile.goal]:''}`}>
