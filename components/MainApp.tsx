@@ -290,6 +290,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
   const [editProfile, setEditProfile] = useState<any>({ ...profile })
   const [avatar, setAvatar] = useState(profile?.avatar || '🥗')
+  const [profileSubPage, setProfileSubPage] = useState<string|null>(null)
   const [editUsername, setEditUsername] = useState(profile?.username || user?.email?.split('@')[0] || '')
   const [editPhone, setEditPhone] = useState(profile?.phone || '')
   const [accountSaving, setAccountSaving] = useState(false)
@@ -313,7 +314,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   async function loadActivity() { try { setActivityLog(await getActivityLog(user.id,todayKey())||[]) } catch(e){console.error(e)} }
   async function loadSavedRecipes() { try { setSavedRecipes(await getSavedRecipes(user.id)||[]) } catch(e){console.error(e)} }
 
-  function switchTab(t:string) { if(t===tab)return; setTab(t); setTabKey(k=>k+1) }
+  function switchTab(t:string) { if(t===tab)return; setTab(t); setTabKey(k=>k+1); if(t!=='profile') setProfileSubPage(null) }
   function viewAllMeals() { setShowSaved(false); switchTab('meals') }
 
   async function getSuggestions() {
@@ -488,31 +489,68 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   function renderTracker() {
     const radius=28, circ=2*Math.PI*radius, pct=Math.min(netCals/tgt,1)
     const rc=netCals>tgt*1.1?'var(--color-red)':netCals>tgt*0.85?'var(--color-primary)':'var(--color-blue)'
+
+    // Build calendar for current month + previous month
+    const now = new Date()
+    const calYear = now.getFullYear(), calMonth = now.getMonth()
+    const firstDay = new Date(calYear, calMonth, 1).getDay()
+    const daysInMonth = new Date(calYear, calMonth+1, 0).getDate()
+    const monthName = now.toLocaleString('en-GB', {month:'long', year:'numeric'})
+    const todayDate = now.getDate()
+
+    // Map of date strings to calorie values from meals
+    const mealCalMap: Record<string,number> = {}
+    const mon = getMonday()
+    DAYS.forEach((_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); if(meals[i]?.macros?.calories) mealCalMap[dateKey(d)]=meals[i].macros.calories })
+
+    const macroProtein = profile?.protein_target || Math.round(tgt*0.3/4)
+    const macroCarbs = profile?.carbs_target || Math.round(tgt*0.4/4)
+    const macroFat = profile?.fat_target || Math.round(tgt*0.3/9)
+    const loggedProtein = foodLog.reduce((a:number,x:any)=>a+(x.protein||0),0)
+    const loggedCarbs = foodLog.reduce((a:number,x:any)=>a+(x.carbs||0),0)
+    const loggedFat = foodLog.reduce((a:number,x:any)=>a+(x.fat||0),0)
+
     return (
       <div key={tabKey} className="anim-fade-slide" style={{padding:'0 1.25rem 1rem'}}>
-        <div style={{fontFamily:'var(--font-display)',fontSize:'19px',fontWeight:'600',marginBottom:'10px'}}>Today's tracker</div>
+
+        {/* Summary strip */}
         <div className="card" style={{background:'var(--color-primary-pale)',borderColor:'var(--color-primary-border)',display:'flex',gap:'10px',marginBottom:'10px'}}>
-          {[{val:totalIn,label:'calories in',color:'var(--color-amber)'},{val:totalBurned,label:'burned',color:'var(--color-red)'},{val:netCals,label:'net kcal',color:rc}].map((item,i)=>(
+          {[{val:totalIn,label:'eaten',color:'var(--color-amber)'},{val:totalBurned,label:'burned',color:'var(--color-red)'},{val:Math.max(tgt-netCals,0),label:'remaining',color:rc}].map((item,i)=>(
             <div key={i} style={{flex:1,textAlign:'center' as const}}>
-              <div style={{fontSize:'20px',fontWeight:'600',fontFamily:'var(--font-display)',color:item.color}}>{item.val}</div>
-              <div style={{fontSize:'10px',color:'var(--color-text-muted)',marginTop:'2px',textTransform:'uppercase' as const,letterSpacing:'.04em'}}>{item.label}</div>
+              <div style={{fontSize:'22px',fontWeight:'600',fontFamily:'var(--font-display)',color:item.color,lineHeight:1}}>{item.val}</div>
+              <div style={{fontSize:'10px',color:'var(--color-text-muted)',marginTop:'3px',textTransform:'uppercase' as const,letterSpacing:'.05em'}}>{item.label}</div>
             </div>
           ))}
         </div>
-        <div className="card" style={{display:'flex',alignItems:'center',gap:'16px',marginBottom:'10px'}}>
-          <svg width="72" height="72" viewBox="0 0 72 72" style={{flexShrink:0}}>
-            <circle cx="36" cy="36" r={radius} fill="none" stroke="var(--color-border)" strokeWidth="6"/>
-            <circle cx="36" cy="36" r={radius} fill="none" stroke={rc} strokeWidth="6" strokeDasharray={`${(pct*circ).toFixed(1)} ${circ.toFixed(1)}`} strokeLinecap="round" transform="rotate(-90 36 36)" style={{transition:'stroke-dasharray 0.5s ease'}}/>
-            <text x="36" y="41" textAnchor="middle" fontSize="13" fontWeight="600" fill={rc} fontFamily="sans-serif">{Math.round(pct*100)}%</text>
-          </svg>
-          <div>
-            <div style={{fontSize:'13px',fontWeight:'500',marginBottom:'2px'}}>vs daily target</div>
-            <div style={{fontSize:'12px',color:'var(--color-text-muted)'}}>{netCals} kcal · target {tgt} kcal</div>
-          </div>
+
+        {/* Macro progress bars */}
+        <div className="card" style={{marginBottom:'10px'}}>
+          <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'10px'}}>Macros today</div>
+          {[
+            {label:'Protein', logged:loggedProtein, target:macroProtein, color:'var(--color-primary)', unit:'g'},
+            {label:'Carbs',   logged:loggedCarbs,   target:macroCarbs,   color:'var(--color-blue)',    unit:'g'},
+            {label:'Fat',     logged:loggedFat,     target:macroFat,     color:'var(--color-amber)',   unit:'g'},
+          ].map(m=>{
+            const barPct = Math.min((m.logged/Math.max(m.target,1))*100, 100)
+            const over = m.logged > m.target
+            return (
+              <div key={m.label} style={{marginBottom:'10px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:'4px'}}>
+                  <span style={{fontSize:'12px',color:'var(--color-text-muted)'}}>{m.label}</span>
+                  <span style={{fontSize:'12px',fontWeight:'500',color:over?'var(--color-red)':m.color}}>{m.logged}g <span style={{fontWeight:'400',color:'var(--color-text-muted)'}}>/ {m.target}g</span></span>
+                </div>
+                <div style={{height:'6px',background:'var(--color-border)',borderRadius:'3px',overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${barPct}%`,background:over?'var(--color-red)':m.color,borderRadius:'3px',transition:'width 0.5s ease'}}/>
+                </div>
+              </div>
+            )
+          })}
         </div>
+
+        {/* Food log */}
         <div className="card" style={{marginBottom:'10px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-            <div style={{fontSize:'13px',fontWeight:'500'}}>Food log</div>
+            <div style={{fontSize:'13px',fontWeight:'500'}}>🍴 Food log</div>
             <button className="pressable" onClick={()=>{setLogResult(null);setLogModalOpen(true)}} style={{fontSize:'12px',color:'var(--color-primary)',background:'none',border:'none',cursor:'pointer',fontWeight:'500',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'3px'}}><i className="ti ti-plus" style={{fontSize:'13px'}}/>Add food</button>
           </div>
           {!foodLog.length?<div style={{fontSize:'13px',color:'var(--color-text-muted)'}}>Nothing logged yet.</div>:foodLog.map((item:any)=>(
@@ -525,9 +563,11 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             </div>
           ))}
         </div>
-        <div className="card">
+
+        {/* Activity */}
+        <div className="card" style={{marginBottom:'10px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-            <div style={{fontSize:'13px',fontWeight:'500'}}>Activity</div>
+            <div style={{fontSize:'13px',fontWeight:'500'}}>🏃 Activity</div>
             <button className="pressable" onClick={()=>setActModalOpen(true)} style={{fontSize:'12px',color:'var(--color-primary)',background:'none',border:'none',cursor:'pointer',fontWeight:'500',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'3px'}}><i className="ti ti-plus" style={{fontSize:'13px'}}/>Add</button>
           </div>
           {!activityLog.length?<div style={{fontSize:'13px',color:'var(--color-text-muted)'}}>No activity logged.</div>:activityLog.map((item:any)=>{
@@ -541,6 +581,45 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
               </div>
             )
           })}
+        </div>
+
+        {/* Monthly calendar */}
+        <div className="card">
+          <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'10px'}}>📅 {monthName}</div>
+          {/* Day-of-week header */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'2px',marginBottom:'4px'}}>
+            {['M','T','W','T','F','S','S'].map((d,i)=>(
+              <div key={i} style={{textAlign:'center' as const,fontSize:'10px',color:'var(--color-text-muted)',fontWeight:'600',padding:'3px 0'}}>{d}</div>
+            ))}
+          </div>
+          {/* Calendar grid */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'3px'}}>
+            {/* Leading empty cells - JS Sun=0, Mon=1…Sat=6; firstDay Sun=0→6 offset */}
+            {Array.from({length:(firstDay===0?6:firstDay-1)},(_,i)=>(
+              <div key={`e${i}`} style={{aspectRatio:'1'}}/>
+            ))}
+            {Array.from({length:daysInMonth},(_,i)=>{
+              const day=i+1
+              const d=new Date(calYear,calMonth,day)
+              const dk=dateKey(d)
+              const cals=mealCalMap[dk]||0
+              const isToday=day===todayDate
+              const hasMeal=cals>0
+              const dotColor=cals>tgt*1.1?'var(--color-red)':cals>tgt*0.85?'var(--color-primary)':'var(--color-blue)'
+              return (
+                <div key={day} style={{aspectRatio:'1',borderRadius:'8px',display:'flex',flexDirection:'column' as const,alignItems:'center',justifyContent:'center',background:isToday?'var(--color-primary)':'transparent',border:isToday?'none':`0.5px solid ${hasMeal?'var(--color-border)':'transparent'}`,position:'relative' as const}}>
+                  <span style={{fontSize:'11px',fontWeight:isToday?'600':'400',color:isToday?'#fff':hasMeal?'var(--color-text)':'var(--color-text-muted)',lineHeight:1}}>{day}</span>
+                  {hasMeal&&!isToday&&<div style={{width:'4px',height:'4px',borderRadius:'50%',background:dotColor,marginTop:'2px'}}/>}
+                  {isToday&&hasMeal&&<div style={{width:'4px',height:'4px',borderRadius:'50%',background:'rgba(255,255,255,0.7)',marginTop:'2px'}}/>}
+                </div>
+              )
+            })}
+          </div>
+          <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginTop:'8px',display:'flex',gap:'10px',flexWrap:'wrap' as const}}>
+            <span><span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-primary)',marginRight:'4px',verticalAlign:'middle'}}/>On target</span>
+            <span><span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-blue)',marginRight:'4px',verticalAlign:'middle'}}/>Under</span>
+            <span><span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-red)',marginRight:'4px',verticalAlign:'middle'}}/>Over</span>
+          </div>
         </div>
       </div>
     )
@@ -684,7 +763,6 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           )}
           {chatHistory.map((msg:any,i:number)=>(
             <div key={i} className="anim-fade-slide" style={{alignSelf:msg.role==='user'?'flex-end':'flex-start',display:'flex',gap:'10px',alignItems:'flex-start',maxWidth:'85%'}}>
-              {msg.role==='assistant'&&<img src="/images/coach.png" alt="Coach" style={{width:'32px',height:'32px',borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>}
               <div style={{padding:'10px 14px',borderRadius:'16px',fontSize:'13px',lineHeight:'1.6',background:msg.role==='user'?'var(--color-primary)':'var(--color-surface)',color:msg.role==='user'?'#fff':'var(--color-text)',border:msg.role==='user'?'none':`1px solid var(--color-border)`,borderBottomRightRadius:msg.role==='user'?'4px':'16px',borderBottomLeftRadius:msg.role==='user'?'16px':'4px'}}>
                 {msg.role==='assistant'&&<div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-primary-light)',marginBottom:'4px'}}>Planify Coach</div>}
                 {msg.content}
@@ -692,8 +770,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             </div>
           ))}
           {chatLoading&&(
-            <div className="anim-fade-slide" style={{alignSelf:'flex-start',display:'flex',gap:'10px',alignItems:'flex-start'}}>
-              <img src="/images/coach.png" alt="Coach" style={{width:'32px',height:'32px',borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>
+            <div className="anim-fade-slide" style={{alignSelf:'flex-start'}}>
               <div style={{background:'var(--color-surface)',border:`1px solid var(--color-border)`,borderRadius:'16px',borderBottomLeftRadius:'4px',padding:'14px'}}>
                 <div className="loading-dots"><div className="loading-dot"/><div className="loading-dot"/><div className="loading-dot"/></div>
               </div>
@@ -712,9 +789,12 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   }
 
   function renderProfile() {
+    // Sub-page routing within profile
+    if (profileSubPage === 'accountSettings') return renderAccountSettings()
+    if (profileSubPage === 'settings') return renderAppSettings()
+
     return (
       <div key={tabKey} className="anim-fade-slide" style={{padding:'0 1.25rem 1rem'}}>
-
         {/* Hero */}
         <div style={{textAlign:'center' as const,marginBottom:'1.75rem',paddingTop:'1rem'}}>
           <div className="pressable" onClick={()=>setEditModalOpen('avatar')}
@@ -725,17 +805,12 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             </div>
           </div>
           <div style={{fontFamily:'var(--font-display)',fontSize:'24px',fontWeight:'600',color:'var(--color-text)'}}>{profile?.username||displayName}</div>
-          {profile?.tdee&&(
-            <div style={{marginTop:'8px',display:'inline-flex',alignItems:'center',gap:'5px',background:'var(--color-primary-pale)',color:'var(--color-primary)',padding:'5px 14px',borderRadius:'20px',fontSize:'12px',fontWeight:'500'}}>
-              🎯 {profile.tdee} kcal daily target
-            </div>
-          )}
         </div>
 
-        {/* Account settings — single tappable row */}
+        {/* Account */}
         <div style={{marginBottom:'1.25rem'}}>
           <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px'}}>Account</div>
-          <div className="card pressable" onClick={()=>setEditModalOpen('accountSettings')}
+          <div className="card pressable" onClick={()=>setProfileSubPage('accountSettings')}
             style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',cursor:'pointer'}}>
             <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
               <div style={{width:'36px',height:'36px',borderRadius:'10px',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -748,15 +823,20 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             </div>
             <i className="ti ti-arrow-right" style={{fontSize:'16px',color:'var(--color-text-muted)'}}/>
           </div>
+        </div>
+
+        {/* Calorie target — own section */}
+        <div style={{marginBottom:'1.25rem'}}>
+          <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px'}}>Nutrition</div>
           <div className="card pressable" onClick={()=>setEditModalOpen('tdee')}
-            style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',cursor:'pointer',marginTop:'6px'}}>
+            style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',cursor:'pointer'}}>
             <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
               <div style={{width:'36px',height:'36px',borderRadius:'10px',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
                 <i className="ti ti-calculator" style={{fontSize:'20px',color:'var(--color-primary)'}}/>
               </div>
               <div>
                 <div style={{fontSize:'14px',fontWeight:'500',color:'var(--color-text)'}}>Calorie target</div>
-                <div style={{fontSize:'12px',color:'var(--color-primary)',marginTop:'1px'}}>{profile?.tdee?`${profile.tdee} kcal · tap to recalculate`:'Not set yet'}</div>
+                <div style={{fontSize:'12px',color:'var(--color-primary)',marginTop:'1px'}}>{profile?.tdee?`${profile.tdee} kcal · tap to recalculate`:'Not set — tap to calculate'}</div>
               </div>
             </div>
             <i className="ti ti-arrow-right" style={{fontSize:'16px',color:'var(--color-text-muted)'}}/>
@@ -765,15 +845,15 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
         {/* Diet & goals */}
         {[
-          {label:'Diet & allergies',key:'diet',emoji:'🥦',rows:[{k:'Diet',v:profile.diet?.join(', ')||'None'},{k:'Allergies',v:profile.allergies?.join(', ')||'None'}]},
-          {label:'Goals & budget',key:'goals',emoji:'🎯',rows:[{k:'Eating goal',v:profile.goal?GL[profile.goal]:'Not set'},{k:'Weekly budget',v:`€${profile.budget}`}]},
+          {label:'Diet & allergies',key:'diet',rows:[{k:'Diet',v:profile.diet?.join(', ')||'None'},{k:'Allergies',v:profile.allergies?.join(', ')||'None'}]},
+          {label:'Goals & budget',key:'goals',rows:[{k:'Eating goal',v:profile.goal?GL[profile.goal]:'Not set'},{k:'Weekly budget',v:`€${profile.budget}`}]},
         ].map(section=>(
           <div key={section.key} style={{marginBottom:'1.25rem'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}}>
               <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em'}}>{section.label}</div>
               <button className="pressable" onClick={()=>{setEditProfile({...profile});setEditModalOpen(section.key)}}
                 style={{fontSize:'12px',color:'var(--color-primary)',background:'none',border:'none',cursor:'pointer',fontWeight:'500',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'3px'}}>
-                ✏️ Edit
+                Edit
               </button>
             </div>
             {section.rows.map(row=>(
@@ -787,27 +867,109 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
         {/* Settings */}
         <div style={{marginBottom:'1.25rem'}}>
-          <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px'}}>Settings</div>
-          <div className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px',padding:'12px 14px'}}>
-            <div>
-              <div style={{fontSize:'13px',fontWeight:'500'}}>🌙 Dark theme</div>
-              <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>Switch between light and dark</div>
+          <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px'}}>App</div>
+          <div className="card pressable" onClick={()=>setProfileSubPage('settings')}
+            style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',cursor:'pointer'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+              <div style={{width:'36px',height:'36px',borderRadius:'10px',background:'var(--color-surface)',border:`1px solid var(--color-border)`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <i className="ti ti-settings" style={{fontSize:'20px',color:'var(--color-text-muted)'}}/>
+              </div>
+              <div>
+                <div style={{fontSize:'14px',fontWeight:'500',color:'var(--color-text)'}}>Settings</div>
+                <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>Theme, notifications, app info</div>
+              </div>
             </div>
-            <ToggleSwitch value={theme==='dark'} onChange={()=>toggleTheme()}/>
-          </div>
-          <div className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px'}}>
-            <div>
-              <div style={{fontSize:'13px',fontWeight:'500'}}>🔔 Notifications</div>
-              <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>Coming soon</div>
-            </div>
-            <ToggleSwitch value={false} onChange={()=>{}}/>
+            <i className="ti ti-arrow-right" style={{fontSize:'16px',color:'var(--color-text-muted)'}}/>
           </div>
         </div>
 
         <button className="pressable" onClick={()=>supabase.auth.signOut()}
-          style={{width:'100%',padding:'13px',background:'var(--color-red)',color:'#fff',border:'none',borderRadius:'12px',fontSize:'15px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px'}}>
-          🚪 Sign out
+          style={{width:'100%',padding:'13px',background:'var(--color-red)',color:'#fff',border:'none',borderRadius:'12px',fontSize:'15px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'}}>
+          Sign out
         </button>
+      </div>
+    )
+  }
+
+  function renderAccountSettings() {
+    return (
+      <div key="account-settings" className="anim-fade-slide" style={{padding:'0 1.25rem 1rem'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'12px',padding:'1rem 0 1.25rem',borderBottom:`1px solid var(--color-border-subtle)`,marginBottom:'1.25rem'}}>
+          <button className="pressable" onClick={()=>setProfileSubPage(null)}
+            style={{background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:'6px',fontSize:'14px',color:'var(--color-primary)',fontFamily:'inherit',fontWeight:'500'}}>
+            <i className="ti ti-arrow-left" style={{fontSize:'18px'}}/>Back
+          </button>
+          <div style={{fontFamily:'var(--font-display)',fontSize:'17px',fontWeight:'600'}}>Account settings</div>
+        </div>
+        {[
+          {icon:'ti-mail',label:'Email',val:user.email,sub:'Tap to request change',action:'email'},
+          {icon:'ti-at',label:'Username',val:profile?.username||displayName,sub:'Your display name',action:'account'},
+          {icon:'ti-phone',label:'Phone number',val:profile?.phone||'Not set',sub:'Add a phone number',action:'account'},
+          {icon:'ti-lock',label:'Password',val:'••••••••',sub:'Change your password',action:'password'},
+        ].map(row=>(
+          <div key={row.label} className="card pressable" onClick={()=>setEditModalOpen(row.action)}
+            style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px',padding:'14px 16px',cursor:'pointer'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+              <div style={{width:'36px',height:'36px',borderRadius:'10px',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <i className={`ti ${row.icon}`} style={{fontSize:'18px',color:'var(--color-primary)'}}/>
+              </div>
+              <div>
+                <div style={{fontSize:'13px',fontWeight:'500',color:'var(--color-text)'}}>{row.label}</div>
+                <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>{row.val}</div>
+              </div>
+            </div>
+            <i className="ti ti-arrow-right" style={{fontSize:'15px',color:'var(--color-text-muted)'}}/>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  function renderAppSettings() {
+    return (
+      <div key="app-settings" className="anim-fade-slide" style={{padding:'0 1.25rem 1rem'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'12px',padding:'1rem 0 1.25rem',borderBottom:`1px solid var(--color-border-subtle)`,marginBottom:'1.25rem'}}>
+          <button className="pressable" onClick={()=>setProfileSubPage(null)}
+            style={{background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:'6px',fontSize:'14px',color:'var(--color-primary)',fontFamily:'inherit',fontWeight:'500'}}>
+            <i className="ti ti-arrow-left" style={{fontSize:'18px'}}/>Back
+          </button>
+          <div style={{fontFamily:'var(--font-display)',fontSize:'17px',fontWeight:'600'}}>Settings</div>
+        </div>
+
+        <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px'}}>Appearance</div>
+        <div className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px',padding:'14px 16px'}}>
+          <div>
+            <div style={{fontSize:'14px',fontWeight:'500'}}>Dark theme</div>
+            <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'2px'}}>Switch between light and dark mode</div>
+          </div>
+          <ToggleSwitch value={theme==='dark'} onChange={()=>toggleTheme()}/>
+        </div>
+
+        <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px',marginTop:'1.25rem'}}>Notifications</div>
+        <div className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px',padding:'14px 16px'}}>
+          <div>
+            <div style={{fontSize:'14px',fontWeight:'500'}}>Daily reminders</div>
+            <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'2px'}}>Coming soon</div>
+          </div>
+          <ToggleSwitch value={false} onChange={()=>{}}/>
+        </div>
+        <div className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px',padding:'14px 16px'}}>
+          <div>
+            <div style={{fontSize:'14px',fontWeight:'500'}}>Water reminders</div>
+            <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'2px'}}>Coming soon</div>
+          </div>
+          <ToggleSwitch value={false} onChange={()=>{}}/>
+        </div>
+
+        <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px',marginTop:'1.25rem'}}>About</div>
+        <div className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px',padding:'14px 16px'}}>
+          <span style={{fontSize:'14px',fontWeight:'500'}}>App version</span>
+          <span style={{fontSize:'13px',background:'var(--color-primary-pale)',color:'var(--color-primary)',padding:'3px 10px',borderRadius:'20px',fontWeight:'500'}}>v1.0 beta</span>
+        </div>
+        <div className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 16px'}}>
+          <span style={{fontSize:'14px',fontWeight:'500'}}>Privacy policy</span>
+          <i className="ti ti-arrow-right" style={{fontSize:'15px',color:'var(--color-text-muted)'}}/>
+        </div>
       </div>
     )
   }
@@ -1017,31 +1179,6 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         <input type="range" min="10" max="200" step="5" value={editProfile.budget} onChange={e=>setEditProfile((p:any)=>({...p,budget:parseInt(e.target.value)}))} style={{width:'100%',accentColor:'var(--color-primary)',margin:'.5rem 0 1.25rem'}}/>
         <button className="pressable" onClick={saveEditedProfile} style={btnPrimary()}>Save changes</button>
         <button className="pressable" onClick={()=>setEditModalOpen(null)} style={btnGhost()}>Cancel</button>
-      </Modal>
-
-      {/* ACCOUNT SETTINGS MODAL */}
-      <Modal open={editModalOpen==='accountSettings'} onClose={()=>setEditModalOpen(null)} title="Account settings" subtitle="Manage your personal details.">
-        {[
-          {icon:'ti-mail',label:'Email',val:user.email,action:'email'},
-          {icon:'ti-at',label:'Username',val:profile?.username||displayName,action:'account'},
-          {icon:'ti-phone',label:'Phone',val:profile?.phone||'Add phone number',action:'account'},
-          {icon:'ti-lock',label:'Password',val:'Change password',action:'password'},
-        ].map(row=>(
-          <div key={row.label} className="card pressable" onClick={()=>setEditModalOpen(row.action)}
-            style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px',padding:'13px 16px',cursor:'pointer'}}>
-            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-              <div style={{width:'32px',height:'32px',borderRadius:'8px',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                <i className={`ti ${row.icon}`} style={{fontSize:'16px',color:'var(--color-primary)'}}/>
-              </div>
-              <div>
-                <div style={{fontSize:'13px',fontWeight:'500',color:'var(--color-text)'}}>{row.label}</div>
-                <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>{row.val}</div>
-              </div>
-            </div>
-            <i className="ti ti-arrow-right" style={{fontSize:'15px',color:'var(--color-text-muted)'}}/>
-          </div>
-        ))}
-        <button className="pressable" onClick={()=>setEditModalOpen(null)} style={btnGhost()}>Close</button>
       </Modal>
 
       {/* TDEE MODAL */}
