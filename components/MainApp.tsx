@@ -416,7 +416,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const btnGhost = () => ({ width:'100%', padding:'10px', background:'transparent', border:'none', fontSize:'13px', color:'var(--color-text-muted)', cursor:'pointer', fontFamily:'inherit' })
 
   function renderHome() {
-    return <Dashboard key={tabKey} user={user} profile={{...profile,tdee:tgt}} meals={meals} foodLog={foodLog} activityLog={activityLog} waterToday={waterToday} waterGoal={waterGoal} waterStreak={waterStreak} weightLog={weightLog} activeDay={activeDay} onAddMeal={()=>{setMealModalOpen(true);setMealSuggestions([])}} onLogFood={()=>{setLogResult(null);setLogModalOpen(true)}} onLogActivity={()=>setActModalOpen(true)} onAddWater={updateWater} onSwitchTab={switchTab} onViewAllMeals={viewAllMeals} />
+    return <Dashboard key={tabKey} user={user} profile={{...profile,tdee:tgt}} meals={meals} foodLog={foodLog} activityLog={activityLog} waterToday={waterToday} waterGoal={waterGoal} waterStreak={waterStreak} weightLog={weightLog} activeDay={activeDay} onAddMeal={()=>{setMealModalOpen(true);setMealSuggestions([])}} onLogFood={()=>{setLogResult(null);setLogModalOpen(true)}} onLogActivity={()=>setActModalOpen(true)} onAddWater={updateWater} onSwitchTab={switchTab} onViewAllMeals={viewAllMeals} onGoToProfile={()=>switchTab('profile')} avatarEmoji={profile?.avatar||avatar||'🥗'} />
   }
 
   function renderMeals() {
@@ -714,45 +714,74 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   function renderProfile() {
     return (
       <div key={tabKey} className="anim-fade-slide" style={{padding:'0 1.25rem 1rem'}}>
-        <div style={{textAlign:'center' as const,marginBottom:'1.5rem'}}>
-          <div className="pressable" onClick={()=>setEditModalOpen('avatar')} style={{width:'80px',height:'80px',borderRadius:'50%',background:'linear-gradient(135deg,var(--color-primary),var(--color-primary-light))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'36px',margin:'0 auto 10px',boxShadow:'0 4px 16px rgba(45,106,79,0.3)',cursor:'pointer',position:'relative' as const}}>
+
+        {/* Hero */}
+        <div style={{textAlign:'center' as const,marginBottom:'1.75rem',paddingTop:'1rem'}}>
+          <div className="pressable" onClick={()=>setEditModalOpen('avatar')}
+            style={{width:'88px',height:'88px',borderRadius:'50%',background:'linear-gradient(135deg,var(--color-primary),var(--color-primary-light))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'40px',margin:'0 auto 12px',boxShadow:'0 4px 20px rgba(45,106,79,0.3)',cursor:'pointer',position:'relative' as const}}>
             {profile?.avatar||avatar}
-            <div style={{position:'absolute' as const,bottom:0,right:0,width:'24px',height:'24px',borderRadius:'50%',background:'var(--color-surface)',border:`1.5px solid var(--color-border)`,display:'flex',alignItems:'center',justifyContent:'center'}}>
-              <i className="ti ti-pencil" style={{fontSize:'12px',color:'var(--color-text-muted)'}}/>
+            <div style={{position:'absolute' as const,bottom:2,right:2,width:'24px',height:'24px',borderRadius:'50%',background:'var(--color-surface)',border:`1.5px solid var(--color-border)`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <i className="ti ti-pencil" style={{fontSize:'11px',color:'var(--color-text-muted)'}}/>
             </div>
           </div>
-          <div style={{fontFamily:'var(--font-display)',fontSize:'22px',fontWeight:'600',color:'var(--color-text)'}}>{profile?.username||displayName}</div>
-          {profile?.tdee&&<div style={{marginTop:'6px',display:'inline-flex',alignItems:'center',gap:'5px',background:'var(--color-primary-pale)',color:'var(--color-primary)',padding:'4px 12px',borderRadius:'20px',fontSize:'12px',fontWeight:'500'}}><i className="ti ti-target" style={{fontSize:'13px'}}/>{profile.tdee} kcal daily target</div>}
+          <div style={{fontFamily:'var(--font-display)',fontSize:'24px',fontWeight:'600',color:'var(--color-text)'}}>{profile?.username||displayName}</div>
+          {profile?.tdee&&(
+            <div style={{marginTop:'8px',display:'inline-flex',alignItems:'center',gap:'5px',background:'var(--color-primary-pale)',color:'var(--color-primary)',padding:'5px 14px',borderRadius:'20px',fontSize:'12px',fontWeight:'500'}}>
+              🎯 {profile.tdee} kcal daily target
+            </div>
+          )}
         </div>
 
-        {/* Account */}
+        {/* Account settings — single tappable row */}
         <div style={{marginBottom:'1.25rem'}}>
           <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px'}}>Account</div>
-          {[
-            {icon:'ti-mail',label:'Email',val:user.email,action:'email'},
-            {icon:'ti-at',label:'Username',val:profile?.username||displayName,action:'account'},
-            {icon:'ti-phone',label:'Phone',val:profile?.phone||'Add phone',action:'account'},
-            {icon:'ti-lock',label:'Password',val:'········',action:'password'},
-            {icon:'ti-calculator',label:'Calorie target',val:profile?.tdee?`${profile.tdee} kcal`:'Calculate',action:'tdee',green:true},
-          ].map(row=>(
-            <div key={row.label} className="card pressable" onClick={()=>setEditModalOpen(row.action)} style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px',padding:'11px 14px',cursor:'pointer'}}>
-              <span style={{fontSize:'13px',color:'var(--color-text-muted)',display:'flex',alignItems:'center',gap:'6px'}}><i className={`ti ${row.icon}`} style={{fontSize:'14px'}}/>{row.label}</span>
-              <span style={{fontSize:'13px',fontWeight:'500',color:row.green?'var(--color-primary)':'var(--color-text)',display:'flex',alignItems:'center',gap:'4px'}}>{row.val} <i className="ti ti-arrow-right" style={{fontSize:'13px',color:'var(--color-text-muted)'}}/></span>
+          <div className="card pressable" onClick={()=>setEditModalOpen('accountSettings')}
+            style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',cursor:'pointer'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+              <div style={{width:'36px',height:'36px',borderRadius:'10px',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <i className="ti ti-user-circle" style={{fontSize:'20px',color:'var(--color-primary)'}}/>
+              </div>
+              <div>
+                <div style={{fontSize:'14px',fontWeight:'500',color:'var(--color-text)'}}>Account settings</div>
+                <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>Email, username, phone, password</div>
+              </div>
             </div>
-          ))}
+            <i className="ti ti-arrow-right" style={{fontSize:'16px',color:'var(--color-text-muted)'}}/>
+          </div>
+          <div className="card pressable" onClick={()=>setEditModalOpen('tdee')}
+            style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',cursor:'pointer',marginTop:'6px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+              <div style={{width:'36px',height:'36px',borderRadius:'10px',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <i className="ti ti-calculator" style={{fontSize:'20px',color:'var(--color-primary)'}}/>
+              </div>
+              <div>
+                <div style={{fontSize:'14px',fontWeight:'500',color:'var(--color-text)'}}>Calorie target</div>
+                <div style={{fontSize:'12px',color:'var(--color-primary)',marginTop:'1px'}}>{profile?.tdee?`${profile.tdee} kcal · tap to recalculate`:'Not set yet'}</div>
+              </div>
+            </div>
+            <i className="ti ti-arrow-right" style={{fontSize:'16px',color:'var(--color-text-muted)'}}/>
+          </div>
         </div>
 
         {/* Diet & goals */}
         {[
-          {label:'Diet & allergies',key:'diet',rows:[{k:'Diet',v:profile.diet?.join(', ')||'None'},{k:'Allergies',v:profile.allergies?.join(', ')||'None'}]},
-          {label:'Goals & budget',key:'goals',rows:[{k:'Eating goal',v:profile.goal?GL[profile.goal]:'Not set'},{k:'Weekly budget',v:`€${profile.budget}`}]},
+          {label:'Diet & allergies',key:'diet',emoji:'🥦',rows:[{k:'Diet',v:profile.diet?.join(', ')||'None'},{k:'Allergies',v:profile.allergies?.join(', ')||'None'}]},
+          {label:'Goals & budget',key:'goals',emoji:'🎯',rows:[{k:'Eating goal',v:profile.goal?GL[profile.goal]:'Not set'},{k:'Weekly budget',v:`€${profile.budget}`}]},
         ].map(section=>(
           <div key={section.key} style={{marginBottom:'1.25rem'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}}>
               <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em'}}>{section.label}</div>
-              <button className="pressable" onClick={()=>{setEditProfile({...profile});setEditModalOpen(section.key)}} style={{fontSize:'12px',color:'var(--color-primary)',background:'none',border:'none',cursor:'pointer',fontWeight:'500',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'3px'}}><i className="ti ti-pencil" style={{fontSize:'13px'}}/>Edit</button>
+              <button className="pressable" onClick={()=>{setEditProfile({...profile});setEditModalOpen(section.key)}}
+                style={{fontSize:'12px',color:'var(--color-primary)',background:'none',border:'none',cursor:'pointer',fontWeight:'500',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'3px'}}>
+                ✏️ Edit
+              </button>
             </div>
-            {section.rows.map(row=>(<div key={row.k} className="card" style={{display:'flex',justifyContent:'space-between',marginBottom:'6px',padding:'11px 14px'}}><span style={{fontSize:'13px',color:'var(--color-text-muted)'}}>{row.k}</span><span style={{fontSize:'13px',fontWeight:'500',color:'var(--color-primary)'}}>{row.v}</span></div>))}
+            {section.rows.map(row=>(
+              <div key={row.k} className="card" style={{display:'flex',justifyContent:'space-between',marginBottom:'6px',padding:'11px 14px'}}>
+                <span style={{fontSize:'13px',color:'var(--color-text-muted)'}}>{row.k}</span>
+                <span style={{fontSize:'13px',fontWeight:'500',color:'var(--color-primary)'}}>{row.v}</span>
+              </div>
+            ))}
           </div>
         ))}
 
@@ -760,32 +789,36 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         <div style={{marginBottom:'1.25rem'}}>
           <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px'}}>Settings</div>
           <div className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px',padding:'12px 14px'}}>
-            <div><div style={{fontSize:'13px',fontWeight:'500',display:'flex',alignItems:'center',gap:'6px'}}><i className="ti ti-moon" style={{fontSize:'14px'}}/>Dark theme</div><div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>Switch between light and dark</div></div>
+            <div>
+              <div style={{fontSize:'13px',fontWeight:'500'}}>🌙 Dark theme</div>
+              <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>Switch between light and dark</div>
+            </div>
             <ToggleSwitch value={theme==='dark'} onChange={()=>toggleTheme()}/>
           </div>
           <div className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 14px'}}>
-            <div><div style={{fontSize:'13px',fontWeight:'500',display:'flex',alignItems:'center',gap:'6px'}}><i className="ti ti-bell" style={{fontSize:'14px'}}/>Notifications</div><div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>Coming soon</div></div>
+            <div>
+              <div style={{fontSize:'13px',fontWeight:'500'}}>🔔 Notifications</div>
+              <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>Coming soon</div>
+            </div>
             <ToggleSwitch value={false} onChange={()=>{}}/>
           </div>
         </div>
 
-        <button className="pressable" onClick={()=>supabase.auth.signOut()} style={{width:'100%',padding:'13px',background:'var(--color-red)',color:'#fff',border:'none',borderRadius:'12px',fontSize:'15px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px'}}>
-          <i className="ti ti-logout" style={{fontSize:'18px'}}/>Sign out
+        <button className="pressable" onClick={()=>supabase.auth.signOut()}
+          style={{width:'100%',padding:'13px',background:'var(--color-red)',color:'#fff',border:'none',borderRadius:'12px',fontSize:'15px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px'}}>
+          🚪 Sign out
         </button>
       </div>
     )
   }
 
   return (
-    <div style={{maxWidth:'420px',margin:'0 auto',minHeight:'100vh',display:'flex',flexDirection:'column',background:'var(--color-bg)',transition:'background var(--transition-slow)',position:'relative' as const}}>
+    <div style={{maxWidth:'420px',margin:'0 auto',minHeight:'100vh',display:'flex',flexDirection:'column',background:'var(--color-bg)',transition:'background var(--transition-slow)'}}>
 
-      {/* Floating avatar top-right — only on home tab */}
-      {tab==='home'&&(
-        <div className="pressable" onClick={()=>switchTab('profile')}
-          style={{position:'absolute' as const,top:'14px',right:'1.25rem',zIndex:10,width:'40px',height:'40px',borderRadius:'50%',background:'linear-gradient(135deg,var(--color-primary),var(--color-primary-light))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',cursor:'pointer',boxShadow:'0 2px 10px rgba(45,106,79,0.3)'}}>
-          {profile?.avatar||avatar||'🥗'}
-        </div>
-      )}
+      {/* Safe-area top spacer */}
+      <div style={{height:'env(safe-area-inset-top, 12px)', minHeight:'12px'}}/>
+
+      {/* Day strip for meals/tracker/grocery */}
       {['meals','tracker','grocery'].includes(tab)&&(
         <div className="overflow-x-auto" style={{display:'flex',gap:'6px',padding:'.75rem 1.25rem',borderBottom:`1px solid var(--color-border-subtle)`}}>
           {DAYS.map((d,i)=>{
@@ -812,35 +845,14 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         {tab==='profile'&&renderProfile()}
       </div>
 
-      {/* Bottom nav — feature icons sprite for meals/tracker/grocery/health, coach image, tabler for home/profile */}
+      {/* Bottom nav — emoji icons */}
       <nav className="bottom-nav">
         {TABS.map(t=>{
-          // Sprite positions in feature-icons.png (3 cols × 2 rows)
-          const SPRITE_POS: Record<string,string> = {
-            meals:   '0% 0%',
-            tracker: '50% 0%',
-            grocery: '100% 0%',
-            health:  '0% 100%',
-          }
+          const NAV_EMOJI: Record<string,string> = { home:'🏠', meals:'🥗', tracker:'📊', grocery:'🛒', health:'💧', assist:'🤖', profile:'👤' }
           const isActive = tab === t
           return (
             <button key={t} className={`nav-btn pressable ${isActive?'active':''}`} onClick={()=>switchTab(t)}>
-              <div style={{width:'24px',height:'24px',display:'flex',alignItems:'center',justifyContent:'center',opacity:isActive?1:0.5,transition:'opacity 0.2s'}}>
-                {t==='home'    && <i className="ti ti-home"  style={{fontSize:'22px',color:isActive?'var(--color-primary)':'var(--color-text-muted)'}}/>}
-                {t==='profile' && <i className="ti ti-user"  style={{fontSize:'22px',color:isActive?'var(--color-primary)':'var(--color-text-muted)'}}/>}
-                {t==='assist'  && <img src="/images/coach.png" alt="Coach" style={{width:'24px',height:'24px',borderRadius:'50%',objectFit:'cover'}}/>}
-                {SPRITE_POS[t] && (
-                  <div style={{
-                    width:'24px',height:'24px',
-                    backgroundImage:'url(/images/feature-icons.png)',
-                    backgroundSize:'300% 200%',
-                    backgroundPosition:SPRITE_POS[t],
-                    backgroundRepeat:'no-repeat',
-                    filter: isActive ? 'none' : 'grayscale(1) opacity(0.4)',
-                    transition:'filter 0.2s',
-                  }}/>
-                )}
-              </div>
+              <span style={{fontSize:'22px',lineHeight:1,display:'block',opacity:isActive?1:0.45,transition:'opacity 0.2s'}}>{NAV_EMOJI[t]}</span>
               <span className="nav-label" style={{color:isActive?'var(--color-primary)':'var(--color-text-muted)'}}>{TAB_LABELS[t]}</span>
             </button>
           )
@@ -1005,6 +1017,31 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         <input type="range" min="10" max="200" step="5" value={editProfile.budget} onChange={e=>setEditProfile((p:any)=>({...p,budget:parseInt(e.target.value)}))} style={{width:'100%',accentColor:'var(--color-primary)',margin:'.5rem 0 1.25rem'}}/>
         <button className="pressable" onClick={saveEditedProfile} style={btnPrimary()}>Save changes</button>
         <button className="pressable" onClick={()=>setEditModalOpen(null)} style={btnGhost()}>Cancel</button>
+      </Modal>
+
+      {/* ACCOUNT SETTINGS MODAL */}
+      <Modal open={editModalOpen==='accountSettings'} onClose={()=>setEditModalOpen(null)} title="Account settings" subtitle="Manage your personal details.">
+        {[
+          {icon:'ti-mail',label:'Email',val:user.email,action:'email'},
+          {icon:'ti-at',label:'Username',val:profile?.username||displayName,action:'account'},
+          {icon:'ti-phone',label:'Phone',val:profile?.phone||'Add phone number',action:'account'},
+          {icon:'ti-lock',label:'Password',val:'Change password',action:'password'},
+        ].map(row=>(
+          <div key={row.label} className="card pressable" onClick={()=>setEditModalOpen(row.action)}
+            style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px',padding:'13px 16px',cursor:'pointer'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+              <div style={{width:'32px',height:'32px',borderRadius:'8px',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <i className={`ti ${row.icon}`} style={{fontSize:'16px',color:'var(--color-primary)'}}/>
+              </div>
+              <div>
+                <div style={{fontSize:'13px',fontWeight:'500',color:'var(--color-text)'}}>{row.label}</div>
+                <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>{row.val}</div>
+              </div>
+            </div>
+            <i className="ti ti-arrow-right" style={{fontSize:'15px',color:'var(--color-text-muted)'}}/>
+          </div>
+        ))}
+        <button className="pressable" onClick={()=>setEditModalOpen(null)} style={btnGhost()}>Close</button>
       </Modal>
 
       {/* TDEE MODAL */}
