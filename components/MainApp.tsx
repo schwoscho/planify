@@ -487,21 +487,12 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   }
 
   function renderTracker() {
-    const radius=28, circ=2*Math.PI*radius, pct=Math.min(netCals/tgt,1)
     const rc=netCals>tgt*1.1?'var(--color-red)':netCals>tgt*0.85?'var(--color-primary)':'var(--color-blue)'
 
-    // Build calendar for current month + previous month
+    // Calendar: show previous month + current month
     const now = new Date()
     const calYear = now.getFullYear(), calMonth = now.getMonth()
-    const firstDay = new Date(calYear, calMonth, 1).getDay()
-    const daysInMonth = new Date(calYear, calMonth+1, 0).getDate()
-    const monthName = now.toLocaleString('en-GB', {month:'long', year:'numeric'})
     const todayDate = now.getDate()
-
-    // Map of date strings to calorie values from meals
-    const mealCalMap: Record<string,number> = {}
-    const mon = getMonday()
-    DAYS.forEach((_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); if(meals[i]?.macros?.calories) mealCalMap[dateKey(d)]=meals[i].macros.calories })
 
     const macroProtein = profile?.protein_target || Math.round(tgt*0.3/4)
     const macroCarbs = profile?.carbs_target || Math.round(tgt*0.4/4)
@@ -509,6 +500,53 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     const loggedProtein = foodLog.reduce((a:number,x:any)=>a+(x.protein||0),0)
     const loggedCarbs = foodLog.reduce((a:number,x:any)=>a+(x.carbs||0),0)
     const loggedFat = foodLog.reduce((a:number,x:any)=>a+(x.fat||0),0)
+
+    // Build meal cal map from current week meals
+    const mealCalMap: Record<string,number> = {}
+    const mon = getMonday()
+    DAYS.forEach((_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); if(meals[i]?.macros?.calories) mealCalMap[dateKey(d)]=meals[i].macros.calories })
+
+    function renderMonth(year:number, month:number) {
+      const firstDow = new Date(year, month, 1).getDay() // 0=Sun
+      const offset = firstDow === 0 ? 6 : firstDow - 1 // Mon-first offset
+      const daysInMo = new Date(year, month+1, 0).getDate()
+      const mName = new Date(year, month, 1).toLocaleString('en-GB',{month:'long',year:'numeric'})
+      return (
+        <div key={`${year}-${month}`} style={{marginBottom:'1rem'}}>
+          <div style={{fontSize:'12px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px',display:'flex',alignItems:'center',gap:'6px'}}>
+            📅 {mName}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'2px',marginBottom:'4px'}}>
+            {['M','T','W','T','F','S','S'].map((d,i)=>(
+              <div key={i} style={{textAlign:'center' as const,fontSize:'10px',color:'var(--color-text-muted)',fontWeight:'600',padding:'2px 0'}}>{d}</div>
+            ))}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'3px'}}>
+            {Array.from({length:offset},(_,i)=>(<div key={`empty${i}`} style={{aspectRatio:'1'}}/>))}
+            {Array.from({length:daysInMo},(_,i)=>{
+              const day = i+1
+              const isToday = day===todayDate && month===calMonth && year===calYear
+              const dk = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+              const cals = mealCalMap[dk]||0
+              const hasMeal = cals>0
+              const dotColor = cals>tgt*1.1?'var(--color-red)':cals>tgt*0.85?'var(--color-primary)':'var(--color-blue)'
+              return (
+                <div key={day}
+                  style={{aspectRatio:'1',borderRadius:'8px',display:'flex',flexDirection:'column' as const,alignItems:'center',justifyContent:'center',background:isToday?'var(--color-primary)':'transparent',cursor:'default'}}>
+                  <span style={{fontSize:'11px',fontWeight:isToday?'600':'400',color:isToday?'#fff':hasMeal?'var(--color-text)':'var(--color-text-muted)',lineHeight:1}}>{day}</span>
+                  {hasMeal&&!isToday&&<div style={{width:'4px',height:'4px',borderRadius:'50%',background:dotColor,marginTop:'2px'}}/>}
+                  {isToday&&hasMeal&&<div style={{width:'4px',height:'4px',borderRadius:'50%',background:'rgba(255,255,255,0.7)',marginTop:'2px'}}/>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )
+    }
+
+    // Previous month
+    const prevMonth = calMonth === 0 ? 11 : calMonth - 1
+    const prevYear = calMonth === 0 ? calYear - 1 : calYear
 
     return (
       <div key={tabKey} className="anim-fade-slide" style={{padding:'0 1.25rem 1rem'}}>
@@ -523,16 +561,16 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           ))}
         </div>
 
-        {/* Macro progress bars */}
+        {/* Macro bars */}
         <div className="card" style={{marginBottom:'10px'}}>
           <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'10px'}}>Macros today</div>
           {[
-            {label:'Protein', logged:loggedProtein, target:macroProtein, color:'var(--color-primary)', unit:'g'},
-            {label:'Carbs',   logged:loggedCarbs,   target:macroCarbs,   color:'var(--color-blue)',    unit:'g'},
-            {label:'Fat',     logged:loggedFat,     target:macroFat,     color:'var(--color-amber)',   unit:'g'},
+            {label:'Protein',logged:loggedProtein,target:macroProtein,color:'var(--color-primary)'},
+            {label:'Carbs',logged:loggedCarbs,target:macroCarbs,color:'var(--color-blue)'},
+            {label:'Fat',logged:loggedFat,target:macroFat,color:'var(--color-amber)'},
           ].map(m=>{
-            const barPct = Math.min((m.logged/Math.max(m.target,1))*100, 100)
-            const over = m.logged > m.target
+            const barPct=Math.min((m.logged/Math.max(m.target,1))*100,100)
+            const over=m.logged>m.target
             return (
               <div key={m.label} style={{marginBottom:'10px'}}>
                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:'4px'}}>
@@ -583,39 +621,11 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           })}
         </div>
 
-        {/* Monthly calendar */}
+        {/* 2-month calendar */}
         <div className="card">
-          <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'10px'}}>📅 {monthName}</div>
-          {/* Day-of-week header */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'2px',marginBottom:'4px'}}>
-            {['M','T','W','T','F','S','S'].map((d,i)=>(
-              <div key={i} style={{textAlign:'center' as const,fontSize:'10px',color:'var(--color-text-muted)',fontWeight:'600',padding:'3px 0'}}>{d}</div>
-            ))}
-          </div>
-          {/* Calendar grid */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'3px'}}>
-            {/* Leading empty cells - JS Sun=0, Mon=1…Sat=6; firstDay Sun=0→6 offset */}
-            {Array.from({length:(firstDay===0?6:firstDay-1)},(_,i)=>(
-              <div key={`e${i}`} style={{aspectRatio:'1'}}/>
-            ))}
-            {Array.from({length:daysInMonth},(_,i)=>{
-              const day=i+1
-              const d=new Date(calYear,calMonth,day)
-              const dk=dateKey(d)
-              const cals=mealCalMap[dk]||0
-              const isToday=day===todayDate
-              const hasMeal=cals>0
-              const dotColor=cals>tgt*1.1?'var(--color-red)':cals>tgt*0.85?'var(--color-primary)':'var(--color-blue)'
-              return (
-                <div key={day} style={{aspectRatio:'1',borderRadius:'8px',display:'flex',flexDirection:'column' as const,alignItems:'center',justifyContent:'center',background:isToday?'var(--color-primary)':'transparent',border:isToday?'none':`0.5px solid ${hasMeal?'var(--color-border)':'transparent'}`,position:'relative' as const}}>
-                  <span style={{fontSize:'11px',fontWeight:isToday?'600':'400',color:isToday?'#fff':hasMeal?'var(--color-text)':'var(--color-text-muted)',lineHeight:1}}>{day}</span>
-                  {hasMeal&&!isToday&&<div style={{width:'4px',height:'4px',borderRadius:'50%',background:dotColor,marginTop:'2px'}}/>}
-                  {isToday&&hasMeal&&<div style={{width:'4px',height:'4px',borderRadius:'50%',background:'rgba(255,255,255,0.7)',marginTop:'2px'}}/>}
-                </div>
-              )
-            })}
-          </div>
-          <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginTop:'8px',display:'flex',gap:'10px',flexWrap:'wrap' as const}}>
+          {renderMonth(prevYear, prevMonth)}
+          {renderMonth(calYear, calMonth)}
+          <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginTop:'4px',display:'flex',gap:'12px',flexWrap:'wrap' as const}}>
             <span><span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-primary)',marginRight:'4px',verticalAlign:'middle'}}/>On target</span>
             <span><span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-blue)',marginRight:'4px',verticalAlign:'middle'}}/>Under</span>
             <span><span style={{display:'inline-block',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-red)',marginRight:'4px',verticalAlign:'middle'}}/>Over</span>
@@ -753,9 +763,8 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       <div key={tabKey} style={{display:'flex',flexDirection:'column',flex:1,height:'100%'}}>
         <div style={{flex:1,overflowY:'auto',padding:'1rem 1.25rem',display:'flex',flexDirection:'column',gap:'10px'}}>
           {!chatHistory.length&&(
-            <div className="anim-fade-slide" style={{alignSelf:'flex-start',display:'flex',gap:'10px',alignItems:'flex-start'}}>
-              <img src="/images/coach.png" alt="Coach" style={{width:'32px',height:'32px',borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>
-              <div style={{background:'var(--color-surface)',border:`1px solid var(--color-border)`,borderRadius:'16px',borderBottomLeftRadius:'4px',padding:'14px',maxWidth:'80%'}}>
+            <div className="anim-fade-slide" style={{alignSelf:'flex-start',maxWidth:'85%'}}>
+              <div style={{background:'var(--color-surface)',border:`1px solid var(--color-border)`,borderRadius:'16px',borderBottomLeftRadius:'4px',padding:'14px'}}>
                 <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-primary-light)',marginBottom:'4px'}}>Planify Coach</div>
                 <div style={{fontSize:'13px',lineHeight:'1.6'}}>Hi! I'm your personal nutrition coach. Ask me anything — meal ideas, macro advice, or anything nutrition-related!{profile?.tdee?` Your daily target is ${profile.tdee} kcal.`:''}</div>
               </div>
@@ -789,9 +798,9 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   }
 
   function renderProfile() {
-    // Sub-page routing within profile
     if (profileSubPage === 'accountSettings') return renderAccountSettings()
     if (profileSubPage === 'settings') return renderAppSettings()
+    if (profileSubPage === 'tdee') return renderTDEEPage()
 
     return (
       <div key={tabKey} className="anim-fade-slide" style={{padding:'0 1.25rem 1rem'}}>
@@ -828,7 +837,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         {/* Calorie target — own section */}
         <div style={{marginBottom:'1.25rem'}}>
           <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px'}}>Nutrition</div>
-          <div className="card pressable" onClick={()=>setEditModalOpen('tdee')}
+          <div className="card pressable" onClick={()=>setProfileSubPage('tdee')}
             style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',cursor:'pointer'}}>
             <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
               <div style={{width:'36px',height:'36px',borderRadius:'10px',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -852,7 +861,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}}>
               <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em'}}>{section.label}</div>
               <button className="pressable" onClick={()=>{setEditProfile({...profile});setEditModalOpen(section.key)}}
-                style={{fontSize:'12px',color:'var(--color-primary)',background:'none',border:'none',cursor:'pointer',fontWeight:'500',fontFamily:'inherit',display:'flex',alignItems:'center',gap:'3px'}}>
+                style={{fontSize:'12px',color:'var(--color-primary)',background:'none',border:'none',cursor:'pointer',fontWeight:'500',fontFamily:'inherit'}}>
                 Edit
               </button>
             </div>
@@ -865,7 +874,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           </div>
         ))}
 
-        {/* Settings */}
+        {/* App / Settings */}
         <div style={{marginBottom:'1.25rem'}}>
           <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px'}}>App</div>
           <div className="card pressable" onClick={()=>setProfileSubPage('settings')}
@@ -876,10 +885,23 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
               </div>
               <div>
                 <div style={{fontSize:'14px',fontWeight:'500',color:'var(--color-text)'}}>Settings</div>
-                <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>Theme, notifications, app info</div>
+                <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'1px'}}>Theme, notifications</div>
               </div>
             </div>
             <i className="ti ti-arrow-right" style={{fontSize:'16px',color:'var(--color-text-muted)'}}/>
+          </div>
+        </div>
+
+        {/* About */}
+        <div style={{marginBottom:'1.25rem'}}>
+          <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px'}}>About</div>
+          <div className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px',padding:'13px 16px'}}>
+            <span style={{fontSize:'14px',fontWeight:'500'}}>App version</span>
+            <span style={{fontSize:'13px',background:'var(--color-primary-pale)',color:'var(--color-primary)',padding:'3px 10px',borderRadius:'20px',fontWeight:'500'}}>v1.0 beta</span>
+          </div>
+          <div className="card pressable" style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'13px 16px',cursor:'pointer'}}>
+            <span style={{fontSize:'14px',fontWeight:'500'}}>Privacy policy</span>
+            <i className="ti ti-arrow-right" style={{fontSize:'15px',color:'var(--color-text-muted)'}}/>
           </div>
         </div>
 
@@ -887,6 +909,31 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           style={{width:'100%',padding:'13px',background:'var(--color-red)',color:'#fff',border:'none',borderRadius:'12px',fontSize:'15px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'}}>
           Sign out
         </button>
+      </div>
+    )
+  }
+
+  function renderTDEEPage() {
+    return (
+      <div key="tdee-page" className="anim-fade-slide" style={{padding:'0 1.25rem 1rem'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'12px',padding:'1rem 0 1.25rem',borderBottom:`1px solid var(--color-border-subtle)`,marginBottom:'1.25rem'}}>
+          <button className="pressable" onClick={()=>setProfileSubPage(null)}
+            style={{background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:'6px',fontSize:'14px',color:'var(--color-primary)',fontFamily:'inherit',fontWeight:'500'}}>
+            <i className="ti ti-arrow-left" style={{fontSize:'18px'}}/>Back
+          </button>
+          <div style={{fontFamily:'var(--font-display)',fontSize:'17px',fontWeight:'600'}}>Calorie target</div>
+        </div>
+        <TDEEInline
+          goal={profile?.goal}
+          currentTdee={profile?.tdee}
+          onComplete={async(targets:any)=>{
+            try{
+              const u=await saveProfile(user.id,{...profile,tdee:targets.tdee,protein_target:targets.protein,carbs_target:targets.carbs,fat_target:targets.fat})
+              onProfileUpdate(u); setProfileSubPage(null)
+            }catch(e){console.error(e)}
+          }}
+          onCancel={()=>setProfileSubPage(null)}
+        />
       </div>
     )
   }
@@ -961,15 +1008,6 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           <ToggleSwitch value={false} onChange={()=>{}}/>
         </div>
 
-        <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px',marginTop:'1.25rem'}}>About</div>
-        <div className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px',padding:'14px 16px'}}>
-          <span style={{fontSize:'14px',fontWeight:'500'}}>App version</span>
-          <span style={{fontSize:'13px',background:'var(--color-primary-pale)',color:'var(--color-primary)',padding:'3px 10px',borderRadius:'20px',fontWeight:'500'}}>v1.0 beta</span>
-        </div>
-        <div className="card" style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 16px'}}>
-          <span style={{fontSize:'14px',fontWeight:'500'}}>Privacy policy</span>
-          <i className="ti ti-arrow-right" style={{fontSize:'15px',color:'var(--color-text-muted)'}}/>
-        </div>
       </div>
     )
   }
