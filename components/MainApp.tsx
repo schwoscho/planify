@@ -1188,7 +1188,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   // ─── MAIN RENDER ──────────────────────────────────────────────────────────
 
   return (
-    <div style={{maxWidth:'420px',margin:'0 auto',minHeight:'100dvh',display:'flex',flexDirection:'column',background:'var(--color-bg)',transition:'background .3s ease'}}>
+    <div className="app-shell">
 
       {/* Safe area top */}
       <div style={{height:'env(safe-area-inset-top,12px)',minHeight:'12px',flexShrink:0}}/>
