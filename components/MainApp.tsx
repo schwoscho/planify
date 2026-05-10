@@ -1095,9 +1095,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       <div key="acct" className="anim-fade-up" style={{display:'flex',flexDirection:'column',height:'100%'}}>
         <div className="subpage-header">
           <button className="subpage-back" onClick={()=>setProfileSubPage(null)}>
-            <i className="ti ti-arrow-left" style={{fontSize:'18px'}}/>Back
+            <i className="ti ti-chevron-left" style={{fontSize:'20px'}}/>Back
           </button>
           <div className="subpage-title">Account settings</div>
+          <div/>
         </div>
         <div style={{padding:'1.25rem',overflowY:'auto',flex:1}}>
           {[
@@ -1127,9 +1128,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       <div key="settings" className="anim-fade-up" style={{display:'flex',flexDirection:'column',height:'100%'}}>
         <div className="subpage-header">
           <button className="subpage-back" onClick={()=>setProfileSubPage(null)}>
-            <i className="ti ti-arrow-left" style={{fontSize:'18px'}}/>Back
+            <i className="ti ti-chevron-left" style={{fontSize:'20px'}}/>Back
           </button>
           <div className="subpage-title">Settings</div>
+          <div/>
         </div>
         <div style={{padding:'1.25rem',overflowY:'auto',flex:1}}>
           <span className="sl">Appearance</span>
@@ -1165,9 +1167,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       <div key="tdee" className="anim-fade-up" style={{display:'flex',flexDirection:'column',height:'100%'}}>
         <div className="subpage-header">
           <button className="subpage-back" onClick={()=>setProfileSubPage(null)}>
-            <i className="ti ti-arrow-left" style={{fontSize:'18px'}}/>Back
+            <i className="ti ti-chevron-left" style={{fontSize:'20px'}}/>Back
           </button>
           <div className="subpage-title">Calorie target</div>
+          <div/>
         </div>
         <div style={{padding:'1.25rem',overflowY:'auto',flex:1}}>
           <TDEEForm
