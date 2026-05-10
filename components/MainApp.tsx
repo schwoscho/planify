@@ -252,7 +252,9 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const [mealSuggestions, setMealSuggestions] = useState<any[]>([])
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [mealFilters, setMealFilters] = useState({ time:null as string|null, diff:null as string|null, cuisine:null as string|null })
+  const [draftFilters, setDraftFilters] = useState({ time:null as string|null, diff:null as string|null, cuisine:null as string|null })
   const [avoidInput, setAvoidInput] = useState('')
+  const [draftAvoid, setDraftAvoid] = useState('')
   const [savedToast, setSavedToast] = useState(false)
 
   // Tracker modals
@@ -366,10 +368,13 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   }
 
   async function getSuggestions() {
+    // Commit draft filters to actual filters
+    setMealFilters({...draftFilters})
+    setAvoidInput(draftAvoid)
     setSuggestLoading(true); setMealSuggestions([])
     try {
       const res=await fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({profile,filters:{diet:profile.diet,allergies:profile.allergies,goal:profile.goal,budget:profile.budget,time:mealFilters.time,difficulty:mealFilters.diff,cuisine:mealFilters.cuisine},avoid:avoidInput,servings,mealDays})})
+        body:JSON.stringify({profile,filters:{diet:profile.diet,allergies:profile.allergies,goal:profile.goal,budget:profile.budget,time:draftFilters.time,difficulty:draftFilters.diff,cuisine:draftFilters.cuisine},avoid:draftAvoid,servings,mealDays})})
       const data=await res.json(); setMealSuggestions(data.meals||[])
     } catch(e){console.error(e)}
     setSuggestLoading(false)
@@ -485,7 +490,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         waterToday={waterToday} waterGoal={waterGoal} waterStreak={waterStreak}
         weightLog={weightLog} activeDate={activeDate} activeDateLabel={activeDateLabel()}
         avatarEmoji={profile?.avatar||avatar||'🥗'}
-        onAddMeal={()=>{setMealModalOpen(true);setMealSuggestions([])}}
+        onAddMeal={()=>{setDraftFilters({...mealFilters});setDraftAvoid(avoidInput);setMealModalOpen(true);setMealSuggestions([])}}
         onLogFood={()=>{setLogResult(null);setLogModalOpen(true)}}
         onLogActivity={()=>setActModalOpen(true)}
         onAddWater={updateWater} onSwitchTab={switchTab}
@@ -578,7 +583,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                     ))}
                   </div>}
                   <div style={{display:'flex',gap:'8px'}}>
-                    <button className="pressable" onClick={()=>{setMealModalOpen(true);setMealSuggestions([])}}
+                    <button className="pressable" onClick={()=>{setDraftFilters({...mealFilters});setDraftAvoid(avoidInput);setMealModalOpen(true);setMealSuggestions([])}}
                       style={{flex:1,padding:'9px',borderRadius:'var(--radius-md)',border:`0.5px solid var(--color-border)`,background:'var(--color-surface)',fontSize:'12px',fontWeight:'500',color:'var(--color-text-muted)',cursor:'pointer',fontFamily:'var(--font-body)'}}>
                       <i className="ti ti-refresh" style={{fontSize:'12px',marginRight:'4px'}}/>Change
                     </button>
@@ -590,7 +595,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                 </div>
               </div>
             ) : (
-              <div className="pressable" onClick={()=>{setMealModalOpen(true);setMealSuggestions([])}}
+              <div className="pressable" onClick={()=>{setDraftFilters({...mealFilters});setDraftAvoid(avoidInput);setMealModalOpen(true);setMealSuggestions([])}}
                 style={{borderRadius:'var(--radius-xl)',padding:'1.25rem',marginBottom:'12px',border:`1.5px dashed var(--color-border)`,display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
                 <div style={{width:'32px',height:'32px',borderRadius:'50%',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
                   <i className="ti ti-sparkles" style={{fontSize:'16px',color:'var(--color-primary)'}}/>
@@ -1189,26 +1194,68 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       {/* Safe area top */}
       <div style={{height:'env(safe-area-inset-top,12px)',minHeight:'12px',flexShrink:0}}/>
 
-      {/* 30-day date scroller — only for meals and grocery, NOT tracker */}
-      {['meals','grocery'].includes(tab)&&(
-        <div style={{display:'flex',gap:'6px',padding:'.75rem 1.25rem',borderBottom:`0.5px solid var(--color-border-subtle)`,overflowX:'auto',WebkitOverflowScrolling:'touch' as any,flexShrink:0}} className="hide-scroll">
-          {Array.from({length:30},(_,i)=>{
-            const d=new Date(); d.setDate(d.getDate()+i)
-            const dk=dateKey(d)
-            const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
-            const isActive=dk===activeDate
-            const hasMeal=!!meals[dk]
-            return (
-              <div key={dk} className={`day-pill pressable ${isActive?'active':''} ${hasMeal?'has-meal':''}`}
-                onClick={()=>setActiveDate(dk)} style={{flexShrink:0}}>
-                <span className="day-name">{i===0?'Today':dayNames[d.getDay()]}</span>
-                <span className="day-num">{d.getDate()}</span>
-                <span className="day-dot"/>
+      {/* Week calendar — only for meals and grocery */}
+      {['meals','grocery'].includes(tab)&&(()=>{
+        // Find Monday of the week containing activeDate
+        const ad = new Date(activeDate+'T12:00:00')
+        const dow = ad.getDay() // 0=Sun
+        const monday = new Date(ad)
+        monday.setDate(ad.getDate() - (dow===0?6:dow-1))
+
+        const monthLabel = monday.toLocaleDateString('en-GB',{month:'long',year:'numeric'})
+        const days = Array.from({length:7},(_,i)=>{ const d=new Date(monday); d.setDate(monday.getDate()+i); return d })
+
+        function prevWeek() {
+          const d=new Date(activeDate+'T12:00:00'); d.setDate(d.getDate()-7)
+          const today=new Date(); today.setHours(0,0,0,0)
+          if(d>=today) setActiveDate(dateKey(d))
+          else setActiveDate(todayKey())
+        }
+        function nextWeek() {
+          const d=new Date(activeDate+'T12:00:00'); d.setDate(d.getDate()+7)
+          const max=new Date(); max.setDate(max.getDate()+30)
+          if(d<=max) setActiveDate(dateKey(d))
+        }
+        const today=todayKey()
+        const canGoPrev = activeDate > today
+        const maxDate = dateKey(new Date(Date.now()+30*86400000))
+        const canGoNext = days[6] && dateKey(days[6]) < maxDate
+
+        return (
+          <div className="date-strip">
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
+              <span className="date-strip-month">{monthLabel}</span>
+              <div style={{display:'flex',gap:'4px'}}>
+                <button onClick={prevWeek} disabled={!canGoPrev}
+                  style={{width:'26px',height:'26px',border:`0.5px solid var(--border)`,borderRadius:'8px',background:'var(--surface-2)',cursor:canGoPrev?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',opacity:canGoPrev?1:.3,fontSize:'14px',color:'var(--text-2)'}}>
+                  ‹
+                </button>
+                <button onClick={nextWeek} disabled={!canGoNext}
+                  style={{width:'26px',height:'26px',border:`0.5px solid var(--border)`,borderRadius:'8px',background:'var(--surface-2)',cursor:canGoNext?'pointer':'not-allowed',display:'flex',alignItems:'center',justifyContent:'center',opacity:canGoNext?1:.3,fontSize:'14px',color:'var(--text-2)'}}>
+                  ›
+                </button>
               </div>
-            )
-          })}
-        </div>
-      )}
+            </div>
+            <div className="date-strip-row">
+              {days.map((d,i)=>{
+                const dk=dateKey(d)
+                const isActive=dk===activeDate
+                const isToday=dk===today
+                const hasMeal=!!meals[dk]
+                const dayNames=['Su','Mo','Tu','We','Th','Fr','Sa']
+                return (
+                  <div key={dk} className={`day-pill pressable ${isActive?'active':''} ${hasMeal?'has-meal':''}`}
+                    onClick={()=>setActiveDate(dk)}>
+                    <span className="day-name">{isToday?'Today':dayNames[d.getDay()]}</span>
+                    <span className="day-num">{d.getDate()}</span>
+                    <span className="day-dot"/>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Content — scrollable */}
       <div style={{flex:1,overflowY:tab==='assist'?'hidden':'auto',display:'flex',flexDirection:'column',WebkitOverflowScrolling:'touch' as any}}>
@@ -1244,72 +1291,82 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       {/* ── MEAL MODAL ── */}
       <Modal open={mealModalOpen} onClose={()=>setMealModalOpen(false)} title="Suggest a meal" subtitle={`for ${activeDateLabel()}${profile?.goal?' · '+GL[profile.goal]:''}`}>
 
-        {/* Servings + days */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'1.25rem',background:'var(--color-surface-2)',borderRadius:'var(--radius-md)',padding:'12px'}}>
-          <div>
-            <div style={{fontSize:'10px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.07em',marginBottom:'8px'}}>Persons</div>
-            <div className="stepper">
-              <button className="stepper-btn" onClick={()=>setServings(s=>Math.max(1,s-1))}>−</button>
-              <span className="stepper-val">{servings}</span>
-              <button className="stepper-btn" onClick={()=>setServings(s=>Math.min(12,s+1))}>+</button>
+        {/* Servings + days — always same height, hint always visible */}
+        <div style={{background:'var(--surface-2)',borderRadius:'var(--radius-md)',padding:'12px',marginBottom:'1.25rem'}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'8px'}}>
+            <div>
+              <div className="sl" style={{marginBottom:'8px'}}>Persons</div>
+              <div className="stepper">
+                <button className="stepper-btn" onClick={()=>setServings(s=>Math.max(1,s-1))}>−</button>
+                <span className="stepper-val">{servings}</span>
+                <button className="stepper-btn" onClick={()=>setServings(s=>Math.min(12,s+1))}>+</button>
+              </div>
+            </div>
+            <div>
+              <div className="sl" style={{marginBottom:'8px'}}>Days in a row</div>
+              <div className="stepper">
+                <button className="stepper-btn" onClick={()=>setMealDays(d=>Math.max(1,d-1))}>−</button>
+                <span className="stepper-val">{mealDays}</span>
+                <button className="stepper-btn" onClick={()=>setMealDays(d=>Math.min(7,d+1))}>+</button>
+              </div>
             </div>
           </div>
+          {/* Fixed-height hint — always rendered, just invisible when default */}
+          <div style={{fontSize:'11px',color:'var(--text-2)',textAlign:'center' as const,height:'16px',visibility:(servings>1||mealDays>1)?'visible':'hidden'}}>
+            Scaled for {servings} {servings===1?'person':'people'}{mealDays>1?` · ${mealDays} days in a row`:''}
+          </div>
+        </div>
+
+        {/* Filters — clean dropdowns */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px',marginBottom:'1rem'}}>
+          {/* Cuisine */}
           <div>
-            <div style={{fontSize:'10px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.07em',marginBottom:'8px'}}>Days</div>
-            <div className="stepper">
-              <button className="stepper-btn" onClick={()=>setMealDays(d=>Math.max(1,d-1))}>−</button>
-              <span className="stepper-val">{mealDays}</span>
-              <button className="stepper-btn" onClick={()=>setMealDays(d=>Math.min(7,d+1))}>+</button>
+            <div className="sl" style={{marginBottom:'5px'}}>Cuisine</div>
+            <div style={{position:'relative' as const}}>
+              <select value={draftFilters.cuisine||''} onChange={e=>setDraftFilters(f=>({...f,cuisine:e.target.value||null}))}
+                style={{width:'100%',padding:'8px 28px 8px 10px',borderRadius:'var(--radius-md)',border:`0.5px solid ${draftFilters.cuisine?'var(--primary)':'var(--border)'}`,background:draftFilters.cuisine?'var(--primary-pale)':'var(--surface)',color:draftFilters.cuisine?'var(--primary)':'var(--text)',fontSize:'12px',fontFamily:'var(--font-body)',outline:'none',appearance:'none' as const,cursor:'pointer'}}>
+                <option value="">Any</option>
+                {CUISINES.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+              <i className="ti ti-chevron-down" style={{position:'absolute' as const,right:'8px',top:'50%',transform:'translateY(-50%)',fontSize:'12px',color:'var(--text-3)',pointerEvents:'none' as const}}/>
+            </div>
+          </div>
+          {/* Time */}
+          <div>
+            <div className="sl" style={{marginBottom:'5px'}}>Time</div>
+            <div style={{position:'relative' as const}}>
+              <select value={draftFilters.time||''} onChange={e=>setDraftFilters(f=>({...f,time:e.target.value||null}))}
+                style={{width:'100%',padding:'8px 28px 8px 10px',borderRadius:'var(--radius-md)',border:`0.5px solid ${draftFilters.time?'var(--blue)':'var(--border)'}`,background:draftFilters.time?'var(--blue-bg)':'var(--surface)',color:draftFilters.time?'var(--blue)':'var(--text)',fontSize:'12px',fontFamily:'var(--font-body)',outline:'none',appearance:'none' as const,cursor:'pointer'}}>
+                <option value="">Any</option>
+                <option value="quick">Quick &lt;30 min</option>
+                <option value="medium">Medium 30–60 min</option>
+                <option value="weekend">Weekend 60+ min</option>
+              </select>
+              <i className="ti ti-chevron-down" style={{position:'absolute' as const,right:'8px',top:'50%',transform:'translateY(-50%)',fontSize:'12px',color:'var(--text-3)',pointerEvents:'none' as const}}/>
+            </div>
+          </div>
+          {/* Difficulty */}
+          <div>
+            <div className="sl" style={{marginBottom:'5px'}}>Difficulty</div>
+            <div style={{position:'relative' as const}}>
+              <select value={draftFilters.diff||''} onChange={e=>setDraftFilters(f=>({...f,diff:e.target.value||null}))}
+                style={{width:'100%',padding:'8px 28px 8px 10px',borderRadius:'var(--radius-md)',border:`0.5px solid ${draftFilters.diff?'var(--amber)':'var(--border)'}`,background:draftFilters.diff?'var(--amber-bg)':'var(--surface)',color:draftFilters.diff?'var(--amber)':'var(--text)',fontSize:'12px',fontFamily:'var(--font-body)',outline:'none',appearance:'none' as const,cursor:'pointer'}}>
+                <option value="">Any</option>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="advanced">Advanced</option>
+              </select>
+              <i className="ti ti-chevron-down" style={{position:'absolute' as const,right:'8px',top:'50%',transform:'translateY(-50%)',fontSize:'12px',color:'var(--text-3)',pointerEvents:'none' as const}}/>
             </div>
           </div>
         </div>
-        {(servings>1||mealDays>1)&&<div style={{fontSize:'11px',color:'var(--color-text-muted)',marginBottom:'12px',textAlign:'center' as const}}>
-          Scaled for {servings} {servings===1?'person':'people'}{mealDays>1?`, ${mealDays} days in a row`:''}
-        </div>}
 
-        {/* Cuisine */}
-        <SL>Cuisine</SL>
-        <div style={{display:'flex',gap:'6px',overflowX:'auto',paddingBottom:'4px',marginBottom:'1rem'}} className="hide-scroll">
-          <div className={`chip pressable ${!mealFilters.cuisine?'active-green':''}`} onClick={()=>setMealFilters(f=>({...f,cuisine:null}))}>Any</div>
-          {CUISINES.map(c=>(
-            <div key={c.value} className={`chip pressable ${mealFilters.cuisine===c.value?'active-green':''}`}
-              onClick={()=>setMealFilters(f=>({...f,cuisine:f.cuisine===c.value?null:c.value}))}>
-              {c.flag} {c.label}
-            </div>
-          ))}
-        </div>
-
-        {/* Time */}
-        <SL>Time to cook</SL>
-        <div style={{display:'flex',gap:'8px',marginBottom:'1rem'}}>
-          {[['quick','ti-bolt','Quick','Under 30 min'],['medium','ti-clock','Medium','30–60 min'],['weekend','ti-chef-hat','Weekend','60+ min']].map(([v,ic,l,sub])=>(
-            <div key={v} className="pressable" onClick={()=>setMealFilters(f=>({...f,time:f.time===v?null:v}))}
-              style={{flex:1,padding:'10px 4px',borderRadius:'var(--radius-md)',border:`0.5px solid ${mealFilters.time===v?'var(--color-blue)':'var(--color-border)'}`,background:mealFilters.time===v?'var(--color-blue-pale)':'var(--color-surface)',cursor:'pointer',textAlign:'center' as const}}>
-              <i className={`ti ${ic}`} style={{fontSize:'18px',color:mealFilters.time===v?'var(--color-blue)':'var(--color-text-muted)',display:'block',marginBottom:'3px'}}/>
-              <div style={{fontSize:'11px',fontWeight:'500',color:mealFilters.time===v?'var(--color-blue)':'var(--color-text-muted)'}}>{l}</div>
-              <div style={{fontSize:'10px',color:'var(--color-text-muted)'}}>{sub}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Difficulty */}
-        <SL>Difficulty</SL>
-        <div style={{display:'flex',gap:'8px',marginBottom:'1rem'}}>
-          {[['easy','ti-mood-smile','Easy'],['medium','ti-mood-wink','Medium'],['advanced','ti-certificate','Advanced']].map(([v,ic,l])=>(
-            <div key={v} className="pressable" onClick={()=>setMealFilters(f=>({...f,diff:f.diff===v?null:v}))}
-              style={{flex:1,padding:'10px 4px',borderRadius:'var(--radius-md)',border:`0.5px solid ${mealFilters.diff===v?'var(--color-amber)':'var(--color-border)'}`,background:mealFilters.diff===v?'var(--color-amber-pale)':'var(--color-surface)',cursor:'pointer',textAlign:'center' as const}}>
-              <i className={`ti ${ic}`} style={{fontSize:'18px',color:mealFilters.diff===v?'var(--color-amber)':'var(--color-text-muted)',display:'block',marginBottom:'3px'}}/>
-              <div style={{fontSize:'11px',fontWeight:'500',color:mealFilters.diff===v?'var(--color-amber)':'var(--color-text-muted)'}}>{l}</div>
-            </div>
-          ))}
-        </div>
-
-        <input value={avoidInput} onChange={e=>setAvoidInput(e.target.value)} placeholder="Anything to avoid?" className="input"/>
+        <input value={draftAvoid} onChange={e=>setDraftAvoid(e.target.value)} placeholder="Anything to avoid? (optional)" className="input"/>
 
         {/* Suggestions */}
         {mealSuggestions.map((meal:any,i:number)=>(
           <div key={i} className="recipe-card anim-scale-in" style={{marginBottom:'10px',position:'relative' as const}}>
-            <div className="recipe-card-img" style={{background:'var(--color-primary-pale)'}}>
+            <div className="recipe-card-img" style={{background:'var(--primary-pale)'}}>
               <span style={{fontSize:'38px'}}>{meal.emoji||'🍽️'}</span>
               {meal.cuisine&&<span style={{position:'absolute' as const,top:'8px',left:'10px',background:'rgba(0,0,0,.35)',borderRadius:'20px',padding:'3px 9px',fontSize:'10px',fontWeight:'500',color:'#fff'}}>
                 {CUISINES.find(c=>c.value===meal.cuisine)?.flag} {meal.cuisine}
@@ -1329,8 +1386,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                 {meal.macros&&<span className="tag tag-green">{meal.macros.protein}g protein</span>}
               </div>
               <button className="btn-primary pressable" onClick={()=>selectMeal(meal)}>
-                <i className="ti ti-calendar-plus" style={{fontSize:'15px'}}/>
-                Add to {activeDateLabel()}
+                <i className="ti ti-calendar-plus" style={{fontSize:'15px'}}/>Add to {activeDateLabel()}
               </button>
             </div>
           </div>
@@ -1342,7 +1398,8 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             : <><i className="ti ti-sparkles" style={{fontSize:'16px'}}/>{mealSuggestions.length?'Suggest again':'Suggest meals'}</>
           }
         </button>
-        <button className="btn-ghost" onClick={()=>setMealModalOpen(false)} style={{marginTop:'8px'}}>Cancel</button>
+        {/* Cancel — does NOT commit draft filters */}
+        <button className="btn-ghost" onClick={()=>{ setMealModalOpen(false); setMealSuggestions([]) }} style={{marginTop:'8px'}}>Cancel</button>
       </Modal>
 
       {/* ── FOOD LOG MODAL ── */}
