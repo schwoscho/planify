@@ -20,7 +20,7 @@ const COACH_NAME = 'Sage'
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
 const GL: Record<string,string> = { bulk:'Bulking', cut:'Cutting', maintain:'Balanced', energy:'Energy boost', gut:'Gut health' }
 const TARGET: Record<string,number> = { bulk:2700, cut:1750, maintain:2000, energy:2000, gut:1900 }
-const TABS = ['home','meals','tracker','grocery','health','assist','profile']
+const TABS = ['home','meals','grocery','tracker','health','assist','profile']
 const TAB_LABELS: Record<string,string> = { home:'Home', meals:'Meals', tracker:'Tracker', grocery:'Grocery', health:'Health', assist:'Coach', profile:'Profile' }
 const TAB_ICONS: Record<string,string> = { home:'ti-home', meals:'ti-salad', tracker:'ti-chart-bar', grocery:'ti-shopping-cart', health:'ti-droplet', assist:'ti-robot', profile:'ti-user' }
 const AVATARS = ['🥗','💪','🔥','⚡','🌿','🏃','🥑','👑','🌟','🎯']
@@ -501,15 +501,14 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
   function renderMeals() {
     return (
-      <div key={tabKey} className="anim-fade-up" style={{padding:'0 1.25rem 1rem'}}>
+      <div key={tabKey} className="anim-fade-up" style={{padding:'1rem 1.25rem 1rem'}}>
         {/* Toggle */}
         <div style={{display:'flex',gap:'8px',marginBottom:'14px'}}>
           <div className={`chip pressable ${!showSaved?'active-green':''}`} onClick={()=>setShowSaved(false)}>
-            <i className="ti ti-calendar-week" style={{fontSize:'12px'}}/>This week
+            Plan
           </div>
           <div className={`chip pressable ${showSaved?'active-green':''}`} onClick={()=>setShowSaved(true)}>
-            <i className="ti ti-heart" style={{fontSize:'12px'}}/>Saved
-            {savedRecipes.length>0&&<span style={{background:'var(--color-primary)',color:'#fff',borderRadius:'50%',padding:'1px 6px',fontSize:'10px'}}>{savedRecipes.length}</span>}
+            Saved {savedRecipes.length>0&&<span style={{background:'var(--color-primary)',color:'#fff',borderRadius:'50%',padding:'1px 6px',fontSize:'10px',marginLeft:'2px'}}>{savedRecipes.length}</span>}
           </div>
         </div>
 
@@ -762,10 +761,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     const groups: Record<string,any[]>={}
     grocery.forEach((item:any)=>{ if(!groups[item.section])groups[item.section]=[]; groups[item.section].push(item) })
     return (
-      <div key={tabKey} className="anim-fade-up" style={{padding:'0 1.25rem 1rem'}}>
+      <div key={tabKey} className="anim-fade-up" style={{padding:'1rem 1.25rem 1rem'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'12px'}}>
           <div style={{fontSize:'16px',fontWeight:'600',color:'var(--color-text)',display:'flex',alignItems:'center',gap:'8px'}}>
-            <i className="ti ti-shopping-cart" style={{fontSize:'18px',color:'var(--color-primary)'}}/>Grocery list
+            🛒 Grocery list
           </div>
           {grocery.some((g:any)=>g.checked)&&(
             <button className="pressable" onClick={async()=>{await saveGroceryItems(user.id,activeDate,grocery.filter((g:any)=>!g.checked));await loadGrocery()}}
@@ -1194,7 +1193,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       {/* Safe area top */}
       <div style={{height:'env(safe-area-inset-top,12px)',minHeight:'12px',flexShrink:0}}/>
 
-      {/* Week calendar — only for meals and grocery */}
+      {/* Week calendar — meals and grocery tabs */}
       {['meals','grocery'].includes(tab)&&(()=>{
         // Find Monday of the week containing activeDate
         const ad = new Date(activeDate+'T12:00:00')
@@ -1261,8 +1260,8 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       <div style={{flex:1,overflowY:tab==='assist'?'hidden':'auto',display:'flex',flexDirection:'column',WebkitOverflowScrolling:'touch' as any}}>
         {tab==='home'    && renderHome()}
         {tab==='meals'   && renderMeals()}
-        {tab==='tracker' && renderTracker()}
         {tab==='grocery' && renderGrocery()}
+        {tab==='tracker' && renderTracker()}
         {tab==='health'  && renderHealth()}
         {tab==='assist'  && renderAssist()}
         {tab==='profile' && renderProfile()}
@@ -1273,14 +1272,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         <nav className="bottom-nav">
           {TABS.map(t=>{
             const isActive=tab===t
-            const NAV_EMOJI: Record<string,string> = { home:'🏠', meals:'🥗', tracker:'📊', grocery:'🛒', health:'💧', assist:'🤖', profile:'👤' }
+            const NAV_EMOJI: Record<string,string> = { home:'🏠', meals:'🥗', grocery:'🛒', tracker:'📊', health:'💧', assist:'🤖', profile:'👤' }
             return (
               <button key={t} className={`nav-btn ${isActive?'active':''}`} onClick={()=>switchTab(t)}>
-                {/* Try Tabler icon, fall back to emoji if font not loaded */}
-                <span className="nav-icon-wrap">
-                  <i className={`ti ${TAB_ICONS[t]}`} style={{fontSize:'22px',display:'block'}}/>
-                  <span className="nav-icon-emoji">{NAV_EMOJI[t]}</span>
-                </span>
+                <span style={{fontSize:'22px',lineHeight:1,display:'block',opacity:isActive?1:0.4,transition:'opacity .15s'}}>{NAV_EMOJI[t]}</span>
                 <span className="nav-label">{TAB_LABELS[t]}</span>
               </button>
             )

@@ -30,36 +30,37 @@
   --cyan-border: #A5F3FC;
   --purple:   #8B5CF6;
 
-  --color-bg:           var(--bg);
-  --color-surface:      var(--surface);
-  --color-surface-2:    var(--surface-2);
-  --color-border:       var(--border);
-  --color-border-subtle:var(--border-subtle);
-  --color-text:         var(--text);
-  --color-text-muted:   var(--text-2);
-  --color-primary:      var(--primary);
-  --color-primary-light:var(--primary-light);
-  --color-primary-pale: var(--primary-pale);
+  /* Legacy --color-* aliases (used by components) */
+  --color-bg:            var(--bg);
+  --color-surface:       var(--surface);
+  --color-surface-2:     var(--surface-2);
+  --color-border:        var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-text:          var(--text);
+  --color-text-muted:    var(--text-2);
+  --color-primary:       var(--primary);
+  --color-primary-light: var(--primary-light);
+  --color-primary-pale:  var(--primary-pale);
   --color-primary-border:var(--primary-border);
-  --color-red:          var(--red);
-  --color-red-pale:     var(--red-bg);
-  --color-red-border:   #FCA5A5;
-  --color-amber:        var(--amber);
-  --color-amber-pale:   var(--amber-bg);
-  --color-blue:         var(--blue);
-  --color-blue-pale:    var(--blue-bg);
-  --color-blue-border:  var(--blue-border);
-  --color-cyan:         var(--cyan);
-  --color-cyan-pale:    var(--cyan-bg);
-  --color-cyan-border:  var(--cyan-border);
-  --color-purple:       var(--purple);
-
-  --radius-sm:  8px;
-  --radius-md:  12px;
-  --radius-lg:  16px;
-  --radius-xl:  20px;
-  --radius-2xl: 24px;
-  --transition: 0.16s ease;
+  --color-red:           var(--red);
+  --color-red-pale:      var(--red-bg);
+  --color-red-border:    #FCA5A5;
+  --color-amber:         var(--amber);
+  --color-amber-pale:    var(--amber-bg);
+  --color-blue:          var(--blue);
+  --color-blue-pale:     var(--blue-bg);
+  --color-blue-border:   var(--blue-border);
+  --color-cyan:          var(--cyan);
+  --color-cyan-pale:     var(--cyan-bg);
+  --color-cyan-border:   var(--cyan-border);
+  --color-purple:        var(--purple);
+  --font-body:           'DM Sans', system-ui, sans-serif;
+  --font-display:        'DM Serif Display', Georgia, serif;
+  --radius-md:           12px;
+  --radius-lg:           16px;
+  --radius-xl:           20px;
+  --radius-2xl:          24px;
+  --transition:          0.16s ease;
 }
 
 [data-theme="dark"] {
@@ -101,6 +102,24 @@
   --color-blue-border:  var(--blue-border);
   --color-cyan-pale:    var(--cyan-bg);
   --color-cyan-border:  var(--cyan-border);
+  /* re-alias all color vars for dark */
+  --color-bg:            var(--bg);
+  --color-surface:       var(--surface);
+  --color-surface-2:     var(--surface-2);
+  --color-border:        var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-text:          var(--text);
+  --color-text-muted:    var(--text-2);
+  --color-primary:       var(--primary);
+  --color-primary-light: var(--primary-light);
+  --color-primary-pale:  var(--primary-pale);
+  --color-primary-border:var(--primary-border);
+  --color-red:           var(--red);
+  --color-red-border:    #7F1D1D;
+  --color-amber:         var(--amber);
+  --color-blue:          var(--blue);
+  --color-cyan:          var(--cyan);
+  --color-purple:        var(--purple);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -167,13 +186,8 @@ input, button, select, textarea { font-family: var(--font-body); font-size: 14px
 
 /* Bottom nav */
 .bottom-nav { display: grid; grid-template-columns: repeat(7,1fr); border-top: 0.5px solid var(--border); background: var(--surface); padding: 6px 0 max(env(safe-area-inset-bottom,6px),6px); flex-shrink: 0; }
-.nav-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; background: none; border: none; cursor: pointer; padding: 6px 2px; transition: transform var(--transition); }
-.nav-icon-wrap { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
-.nav-icon-wrap .ti { font-size: 22px; color: var(--text-3); display: block; }
-.nav-icon-emoji { font-size: 20px; display: block; opacity: .4; line-height: 1; }
+.nav-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; background: none; border: none; cursor: pointer; padding: 5px 2px; transition: transform .15s; }
 .nav-btn .nav-label { font-size: 9px; font-weight: 500; color: var(--text-3); line-height: 1; }
-.nav-btn.active .nav-icon-wrap .ti { color: var(--primary); }
-.nav-btn.active .nav-icon-emoji { opacity: 1; }
 .nav-btn.active .nav-label { color: var(--primary); font-weight: 600; }
 .nav-btn:active { transform: scale(.88); }
 
