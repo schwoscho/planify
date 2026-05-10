@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import '@tabler/icons-webfont/tabler-icons.css'
+import '@tabler/icons-webfont/dist/tabler-icons.css'
 
 export const metadata: Metadata = {
   title: 'Planify — Your AI nutrition & meal planning companion',
