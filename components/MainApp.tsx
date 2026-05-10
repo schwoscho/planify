@@ -1189,9 +1189,9 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       {/* Safe area top */}
       <div style={{height:'env(safe-area-inset-top,12px)',minHeight:'12px',flexShrink:0}}/>
 
-      {/* 30-day date scroller */}
-      {['meals','tracker','grocery'].includes(tab)&&(
-        <div style={{display:'flex',gap:'6px',padding:'.75rem 1.25rem',borderBottom:`0.5px solid var(--color-border-subtle)`,overflowX:'auto',WebkitOverflowScrolling:'touch' as any}} className="hide-scroll">
+      {/* 30-day date scroller — only for meals and grocery, NOT tracker */}
+      {['meals','grocery'].includes(tab)&&(
+        <div style={{display:'flex',gap:'6px',padding:'.75rem 1.25rem',borderBottom:`0.5px solid var(--color-border-subtle)`,overflowX:'auto',WebkitOverflowScrolling:'touch' as any,flexShrink:0}} className="hide-scroll">
           {Array.from({length:30},(_,i)=>{
             const d=new Date(); d.setDate(d.getDate()+i)
             const dk=dateKey(d)
@@ -1210,8 +1210,8 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         </div>
       )}
 
-      {/* Content */}
-      <div style={{flex:1,overflowY:tab==='assist'?'hidden':'auto',display:'flex',flexDirection:'column'}}>
+      {/* Content — scrollable */}
+      <div style={{flex:1,overflowY:tab==='assist'?'hidden':'auto',display:'flex',flexDirection:'column',WebkitOverflowScrolling:'touch' as any}}>
         {tab==='home'    && renderHome()}
         {tab==='meals'   && renderMeals()}
         {tab==='tracker' && renderTracker()}
@@ -1226,9 +1226,14 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         <nav className="bottom-nav">
           {TABS.map(t=>{
             const isActive=tab===t
+            const NAV_EMOJI: Record<string,string> = { home:'🏠', meals:'🥗', tracker:'📊', grocery:'🛒', health:'💧', assist:'🤖', profile:'👤' }
             return (
               <button key={t} className={`nav-btn ${isActive?'active':''}`} onClick={()=>switchTab(t)}>
-                <i className={`ti ${TAB_ICONS[t]} nav-icon`}/>
+                {/* Try Tabler icon, fall back to emoji if font not loaded */}
+                <span className="nav-icon-wrap">
+                  <i className={`ti ${TAB_ICONS[t]}`} style={{fontSize:'22px',display:'block'}}/>
+                  <span className="nav-icon-emoji">{NAV_EMOJI[t]}</span>
+                </span>
                 <span className="nav-label">{TAB_LABELS[t]}</span>
               </button>
             )
