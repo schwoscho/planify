@@ -246,14 +246,16 @@ function PasswordChangeForm({ onDone }: { onDone: ()=>void }) {
 }
 
 export default function MainApp({ user, profile, onProfileUpdate }: any) {
-  const monday = getMonday()
-  const weekStart = dateKey(monday)
   const { theme, toggle: toggleTheme } = useTheme()
+  const COACH_NAME = 'Sage'
 
   const [tab, setTab] = useState('home')
   const [tabKey, setTabKey] = useState(0)
-  const [activeDay, setActiveDay] = useState(todayDayIndex())
-  const [meals, setMeals] = useState<Record<number,any>>({})
+  // Date-based planning — activeDate is YYYY-MM-DD
+  const [activeDate, setActiveDate] = useState(todayKey())
+  const [meals, setMeals] = useState<Record<string,any>>({}) // keyed by date string
+  const [servings, setServings] = useState(profile?.default_servings||2)
+  const [mealDays, setMealDays] = useState(1) // how many days to repeat the meal
   const [grocery, setGrocery] = useState<any[]>([])
   const [foodLog, setFoodLog] = useState<any[]>([])
   const [waterLog, setWaterLog] = useState<Record<string,number>>({})
@@ -301,13 +303,30 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const [accountSaving, setAccountSaving] = useState(false)
   const [accountMsg, setAccountMsg] = useState('')
 
-  useEffect(() => { loadAll() }, [activeDay])
+  function activeDateLabel() {
+    const d = new Date(activeDate + 'T12:00:00')
+    const today = todayKey()
+    const tomorrow = dateKey(new Date(Date.now() + 86400000))
+    if (activeDate === today) return 'Today'
+    if (activeDate === tomorrow) return 'Tomorrow'
+    return d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' })
+  }
+
+  useEffect(() => { loadAll() }, [activeDate])
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior:'smooth' }) }, [chatHistory])
 
   async function loadAll() { await Promise.all([loadMeals(),loadGrocery(),loadFoodLog(),loadWater(),loadWeight(),loadActivity(),loadSavedRecipes()]) }
-  async function loadMeals() { try { const data=await getMeals(user.id,weekStart); const map:Record<number,any>={}; data.forEach((m:any)=>{map[m.day_index]={...m,desc:m.description}}); setMeals(map) } catch(e){console.error(e)} }
-  async function loadGrocery() { try { setGrocery(await getGroceryItems(user.id,weekStart)||[]) } catch(e){console.error(e)} }
-  async function loadFoodLog() { try { setFoodLog(await getFoodLog(user.id,todayKey())||[]) } catch(e){console.error(e)} }
+  async function loadMeals() {
+    try {
+      // Load meals for the next 30 days using date as key
+      const data = await getMeals(user.id, todayKey())
+      const map: Record<string,any> = {}
+      data.forEach((m: any) => { map[m.plan_date || m.logged_date || m.day_index] = {...m, desc:m.description} })
+      setMeals(map)
+    } catch(e) { console.error(e) }
+  }
+  async function loadGrocery() { try { setGrocery(await getGroceryItems(user.id, activeDate)||[]) } catch(e){console.error(e)} }
+  async function loadFoodLog() { try { setFoodLog(await getFoodLog(user.id, todayKey())||[]) } catch(e){console.error(e)} }
   async function loadWater() {
     try {
       const data=await getWaterLog(user.id,dateKey(new Date(Date.now()-365*86400000)))
@@ -322,21 +341,38 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   function switchTab(t:string) { if(t===tab)return; setTab(t); setTabKey(k=>k+1); if(t!=='profile') setProfileSubPage(null) }
   function viewAllMeals() { setShowSaved(false); switchTab('meals') }
 
+  async function selectMeal(meal: any) {
+    try {
+      for (let d = 0; d < mealDays; d++) {
+        const targetDate = new Date(activeDate + 'T12:00:00')
+        targetDate.setDate(targetDate.getDate() + d)
+        const dk = dateKey(targetDate)
+        await saveMeal(user.id, dk, 0, { ...meal, servings, plan_date: dk })
+      }
+      await loadMeals()
+      setMealModalOpen(false)
+      setMealSuggestions([])
+    } catch(e) { console.error(e) }
+  }
+
   async function getSuggestions() {
     setSuggestLoading(true); setMealSuggestions([])
     try {
-      const res=await fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profile,filters:{diet:profile.diet,allergies:profile.allergies,goal:profile.goal,budget:profile.budget,recipeType:mealFilters.rtype,time:mealFilters.time,difficulty:mealFilters.diff,cuisine:mealFilters.cuisine},avoid:avoidInput})})
+      const res=await fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        profile,
+        filters:{diet:profile.diet,allergies:profile.allergies,goal:profile.goal,budget:profile.budget,recipeType:mealFilters.rtype,time:mealFilters.time,difficulty:mealFilters.diff,cuisine:mealFilters.cuisine},
+        avoid:avoidInput, servings, mealDays,
+      })})
       const data=await res.json(); setMealSuggestions(data.meals||[])
     } catch(e){console.error(e)}
     setSuggestLoading(false)
   }
-  async function selectMeal(meal:any) { try { await saveMeal(user.id,weekStart,activeDay,meal); await loadMeals(); setMealModalOpen(false); setMealSuggestions([]) } catch(e){console.error(e)} }
   async function handleSaveRecipe(meal:any) { try { await saveRecipe(user.id,meal); await loadSavedRecipes(); setSavedToast(true); setTimeout(()=>setSavedToast(false),2500) } catch(e){console.error(e)} }
-  async function addToGrocery(dayIndex:number) {
-    const meal=meals[dayIndex]; if(!meal?.ingredients)return
-    const scale=(meal.servings||2)/2
+  async function addToGrocery(targetDate: string) {
+    const meal=meals[targetDate]; if(!meal?.ingredients)return
+    const scale=servings/2
     const items=meal.ingredients.map((ing:any)=>{ let qty=ing.qty; const m=qty.match(/^([\d.]+)(.*)/); if(m)qty=Math.round(parseFloat(m[1])*scale*10)/10+m[2]; return{name:ing.name,qty,section:ing.section,checked:false} })
-    try { await saveGroceryItems(user.id,weekStart,[...grocery.filter((g:any)=>!items.find((i:any)=>i.name===g.name)),...items]); await loadGrocery(); switchTab('grocery') } catch(e){console.error(e)}
+    try { await saveGroceryItems(user.id,activeDate,[...grocery.filter((g:any)=>!items.find((i:any)=>i.name===g.name)),...items]); await loadGrocery(); switchTab('grocery') } catch(e){console.error(e)}
   }
   async function logFood() {
     const name=foodNameRef.current?.value?.trim(); const portion=foodPortionRef.current?.value?.trim()
@@ -392,7 +428,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   }
 
   // Computed
-  const todayMeal=meals[activeDay]
+  const todayMeal=meals[activeDate]
   const plannedCount=Object.keys(meals).length
   const tgt=profile?.tdee||TARGET[profile?.goal]||2000
   const loggedCals=foodLog.reduce((a:number,x:any)=>a+(x.calories||0),0)
@@ -422,7 +458,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const btnGhost = () => ({ width:'100%', padding:'10px', background:'transparent', border:'none', fontSize:'13px', color:'var(--color-text-muted)', cursor:'pointer', fontFamily:'inherit' })
 
   function renderHome() {
-    return <Dashboard key={tabKey} user={user} profile={{...profile,tdee:tgt}} meals={meals} foodLog={foodLog} activityLog={activityLog} waterToday={waterToday} waterGoal={waterGoal} waterStreak={waterStreak} weightLog={weightLog} activeDay={activeDay} onAddMeal={()=>{setMealModalOpen(true);setMealSuggestions([])}} onLogFood={()=>{setLogResult(null);setLogModalOpen(true)}} onLogActivity={()=>setActModalOpen(true)} onAddWater={updateWater} onSwitchTab={switchTab} onViewAllMeals={viewAllMeals} onGoToProfile={()=>switchTab('profile')} avatarEmoji={profile?.avatar||avatar||'🥗'} />
+    return <Dashboard key={tabKey} user={user} profile={{...profile,tdee:tgt}} meals={meals} foodLog={foodLog} activityLog={activityLog} waterToday={waterToday} waterGoal={waterGoal} waterStreak={waterStreak} weightLog={weightLog} activeDate={activeDate} activeDateLabel={activeDateLabel()} onAddMeal={()=>{setMealModalOpen(true);setMealSuggestions([])}} onLogFood={()=>{setLogResult(null);setLogModalOpen(true)}} onLogActivity={()=>setActModalOpen(true)} onAddWater={updateWater} onSwitchTab={switchTab} onViewAllMeals={viewAllMeals} onGoToProfile={()=>switchTab('profile')} avatarEmoji={profile?.avatar||avatar||'🥗'} />
   }
 
   function renderMeals() {
@@ -449,7 +485,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
               <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginBottom:'8px'}}>{recipe.description}</div>
               {recipe.macros&&<div style={{display:'flex',gap:'6px',marginBottom:'10px'}}>{[{val:recipe.macros.calories,label:'kcal',color:'var(--color-amber)'},{val:recipe.macros.protein+'g',label:'protein',color:'var(--color-primary)'},{val:recipe.macros.carbs+'g',label:'carbs',color:'var(--color-blue)'},{val:recipe.macros.fat+'g',label:'fat',color:'var(--color-purple)'}].map(m=>(<div key={m.label} className="macro-card"><div className="macro-val" style={{color:m.color}}>{m.val}</div><div className="macro-label">{m.label}</div></div>))}</div>}
               <div style={{display:'flex',gap:'8px'}}>
-                <button className="pressable" onClick={async()=>{await selectMeal({...recipe,desc:recipe.description});setShowSaved(false)}} style={{flex:1,padding:'9px',background:'var(--color-primary)',color:'#fff',border:'none',borderRadius:'10px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'}}>Add to {DAYS[activeDay]} →</button>
+                <button className="pressable" onClick={async()=>{await selectMeal({...recipe,desc:recipe.description});setShowSaved(false)}} style={{flex:1,padding:'9px',background:'var(--color-primary)',color:'#fff',border:'none',borderRadius:'10px',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'}}>Add to {activeDateLabel()} →</button>
                 <button className="pressable" onClick={async()=>{await deleteSavedRecipe(user.id,recipe.id);await loadSavedRecipes()}} style={{padding:'9px 12px',background:'var(--color-red-pale)',color:'var(--color-red)',border:`1px solid var(--color-red-border)`,borderRadius:'10px',fontSize:'12px',cursor:'pointer',fontFamily:'inherit'}}><i className="ti ti-trash" style={{fontSize:'14px'}}/></button>
               </div>
             </div>
@@ -463,7 +499,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                 return <div key={f.id} className={`chip pressable ${isActive?(f.type==='diff'?'active-amber':'active-green'):''}`} onClick={()=>{ if(f.id==='all')setMealFilters(m=>({...m,time:null,diff:null})); else if(f.type==='time')setMealFilters(m=>({...m,time:m.time===f.id?null:f.id})); else setMealFilters(m=>({...m,diff:m.diff===f.id?null:f.id})) }}>{(f as any).icon&&<i className={`ti ${(f as any).icon}`} style={{fontSize:'12px',marginRight:'3px'}}/>}{f.label}</div>
               })}
             </div>
-            <SL>{DAYS[activeDay]}'s meal</SL>
+            <SL>{activeDateLabel()}'s meal</SL>
             {todayMeal ? (
               <div className="card anim-scale-in" style={{borderColor:'var(--color-primary-border)',background:'var(--color-primary-pale)',marginBottom:'10px'}}>
                 <div style={{fontFamily:'var(--font-display)',fontSize:'18px',fontWeight:'600',marginBottom:'6px'}}>{todayMeal.name}</div>
@@ -475,13 +511,13 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                 {todayMeal.macros&&<div style={{display:'flex',gap:'6px',marginBottom:'10px'}}>{[{val:todayMeal.macros.calories,label:'kcal',color:'var(--color-amber)'},{val:todayMeal.macros.protein+'g',label:'protein',color:'var(--color-primary)'},{val:todayMeal.macros.carbs+'g',label:'carbs',color:'var(--color-blue)'},{val:todayMeal.macros.fat+'g',label:'fat',color:'var(--color-purple)'}].map(m=>(<div key={m.label} className="macro-card"><div className="macro-val" style={{color:m.color}}>{m.val}</div><div className="macro-label">{m.label}</div></div>))}</div>}
                 <div style={{display:'flex',gap:'8px'}}>
                   <button className="pressable" onClick={()=>{setMealModalOpen(true);setMealSuggestions([])}} style={{flex:1,padding:'9px',borderRadius:'10px',border:`1.5px solid var(--color-border)`,background:'var(--color-surface)',fontSize:'12px',fontWeight:'500',color:'var(--color-text-muted)',cursor:'pointer',fontFamily:'inherit'}}>Change meal</button>
-                  <button className="pressable" onClick={()=>addToGrocery(activeDay)} style={{flex:1,padding:'9px',borderRadius:'10px',border:'none',background:'var(--color-primary)',fontSize:'12px',fontWeight:'500',color:'#fff',cursor:'pointer',fontFamily:'inherit'}}>Add to grocery →</button>
+                  <button className="pressable" onClick={()=>addToGrocery(activeDate)} style={{flex:1,padding:'9px',borderRadius:'10px',border:'none',background:'var(--color-primary)',fontSize:'12px',fontWeight:'500',color:'#fff',cursor:'pointer',fontFamily:'inherit'}}>Add to grocery →</button>
                 </div>
               </div>
             ) : (
               <div className="pressable" onClick={()=>{setMealModalOpen(true);setMealSuggestions([])}} style={{background:'var(--color-surface)',border:`1.5px dashed var(--color-border)`,borderRadius:'16px',padding:'1.25rem',marginBottom:'10px',display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
                 <div style={{width:'32px',height:'32px',borderRadius:'50%',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}><i className="ti ti-plus" style={{fontSize:'18px',color:'var(--color-primary)'}}/></div>
-                <span style={{fontSize:'14px',color:'var(--color-text-muted)'}}>Add a meal for {DAYS[activeDay]}</span>
+                <span style={{fontSize:'14px',color:'var(--color-text-muted)'}}>Add a meal for {activeDateLabel()}</span>
               </div>
             )}
             {plannedCount<7&&<div style={{background:'var(--color-primary-pale)',borderRadius:'10px',padding:'10px 14px',display:'flex',alignItems:'center',gap:'10px'}}><i className="ti ti-clipboard-list" style={{fontSize:'16px',color:'var(--color-primary)'}}/><span style={{fontSize:'13px',color:'var(--color-primary)'}}>{plannedCount} of 7 days planned</span></div>}
@@ -594,7 +630,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             return (
               <>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'10px'}}>
-                  <button onClick={()=>setCalViewOffset(o=>o-1)}
+                  <button onClick={()=>setCalViewOffset(o=>Math.max(o-1,-2))}
                     style={{background:'none',border:'none',cursor:'pointer',fontSize:'18px',color:'var(--color-text-muted)',padding:'4px 8px',borderRadius:'8px',lineHeight:1}}>‹</button>
                   <div style={{fontSize:'12px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em'}}>📅 {mLabel}</div>
                   <button onClick={()=>setCalViewOffset(o=>Math.min(o+1,0))}
@@ -643,7 +679,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       <div key={tabKey} className="anim-fade-slide" style={{padding:'0 1.25rem 1rem'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'12px'}}>
           <div style={{fontFamily:'var(--font-display)',fontSize:'19px',fontWeight:'600'}}>Grocery list</div>
-          {grocery.some((g:any)=>g.checked)&&<button className="pressable" onClick={async()=>{await saveGroceryItems(user.id,weekStart,grocery.filter((g:any)=>!g.checked));await loadGrocery()}} style={{fontSize:'12px',color:'var(--color-text-muted)',background:'none',border:`1px solid var(--color-border)`,borderRadius:'6px',padding:'4px 10px',cursor:'pointer',fontFamily:'inherit'}}>Clear done</button>}
+          {grocery.some((g:any)=>g.checked)&&<button className="pressable" onClick={async()=>{await saveGroceryItems(user.id,activeDate,grocery.filter((g:any)=>!g.checked));await loadGrocery()}} style={{fontSize:'12px',color:'var(--color-text-muted)',background:'none',border:`1px solid var(--color-border)`,borderRadius:'6px',padding:'4px 10px',cursor:'pointer',fontFamily:'inherit'}}>Clear done</button>}
         </div>
         {!grocery.length?(
           <div className="empty-state">
@@ -766,15 +802,15 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           {!chatHistory.length&&(
             <div className="anim-fade-slide" style={{alignSelf:'flex-start',maxWidth:'85%'}}>
               <div style={{background:'var(--color-surface)',border:`1px solid var(--color-border)`,borderRadius:'16px',borderBottomLeftRadius:'4px',padding:'14px'}}>
-                <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-primary-light)',marginBottom:'4px'}}>Planify Coach</div>
-                <div style={{fontSize:'13px',lineHeight:'1.6'}}>Hi! I'm your personal nutrition coach. Ask me anything — meal ideas, macro advice, or anything nutrition-related!{profile?.tdee?` Your daily target is ${profile.tdee} kcal.`:''}</div>
+                <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-primary-light)',marginBottom:'4px'}}>{COACH_NAME}</div>
+                <div style={{fontSize:'13px',lineHeight:'1.6'}}>Hi! I'm {COACH_NAME}, your personal nutrition coach. Ask me anything — meal ideas, macro advice, or anything nutrition-related!{profile?.tdee?` Your daily target is ${profile.tdee} kcal.`:''}</div>
               </div>
             </div>
           )}
           {chatHistory.map((msg:any,i:number)=>(
             <div key={i} className="anim-fade-slide" style={{alignSelf:msg.role==='user'?'flex-end':'flex-start',display:'flex',gap:'10px',alignItems:'flex-start',maxWidth:'85%'}}>
               <div style={{padding:'10px 14px',borderRadius:'16px',fontSize:'13px',lineHeight:'1.6',background:msg.role==='user'?'var(--color-primary)':'var(--color-surface)',color:msg.role==='user'?'#fff':'var(--color-text)',border:msg.role==='user'?'none':`1px solid var(--color-border)`,borderBottomRightRadius:msg.role==='user'?'4px':'16px',borderBottomLeftRadius:msg.role==='user'?'16px':'4px'}}>
-                {msg.role==='assistant'&&<div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-primary-light)',marginBottom:'4px'}}>Planify Coach</div>}
+                {msg.role==='assistant'&&<div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-primary-light)',marginBottom:'4px'}}>{COACH_NAME}</div>}
                 {msg.content}
               </div>
             </div>
@@ -1020,15 +1056,22 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       {/* Safe-area top spacer */}
       <div style={{height:'env(safe-area-inset-top, 12px)', minHeight:'12px'}}/>
 
-      {/* Day strip for meals/tracker/grocery */}
+      {/* 30-day date scroller for meals/tracker/grocery */}
       {['meals','tracker','grocery'].includes(tab)&&(
-        <div className="overflow-x-auto" style={{display:'flex',gap:'6px',padding:'.75rem 1.25rem',borderBottom:`1px solid var(--color-border-subtle)`}}>
-          {DAYS.map((d,i)=>{
-            const date=new Date(monday); date.setDate(monday.getDate()+i)
+        <div style={{overflowX:'auto',display:'flex',gap:'6px',padding:'.75rem 1.25rem',borderBottom:`1px solid var(--color-border-subtle)`,WebkitOverflowScrolling:'touch' as any}}>
+          {Array.from({length:30},(_,i)=>{
+            const d=new Date(); d.setDate(d.getDate()+i)
+            const dk=dateKey(d)
+            const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+            const shortName=dayNames[d.getDay()]
+            const isActive=dk===activeDate
+            const hasMeal=!!meals[dk]
             return (
-              <div key={i} className={`day-pill pressable ${i===activeDay?'active':''} ${meals[i]?'has-meal':''}`} onClick={()=>setActiveDay(i)}>
-                <span className="day-name">{d}</span>
-                <span className="day-num">{date.getDate()}</span>
+              <div key={dk} className={`day-pill pressable ${isActive?'active':''} ${hasMeal?'has-meal':''}`}
+                onClick={()=>setActiveDate(dk)}
+                style={{flexShrink:0}}>
+                <span className="day-name">{i===0?'Today':shortName}</span>
+                <span className="day-num">{d.getDate()}</span>
                 <span className="day-dot"/>
               </div>
             )
@@ -1064,7 +1107,27 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       )}
 
       {/* MEAL MODAL */}
-      <Modal open={mealModalOpen} onClose={()=>setMealModalOpen(false)} title="Suggest a meal" subtitle={`for ${DAYS[activeDay]}${profile?.goal?' · '+GL[profile.goal]:''}`}>
+      <Modal open={mealModalOpen} onClose={()=>setMealModalOpen(false)} title="Suggest a meal" subtitle={`for ${activeDateLabel()}${profile?.goal?' · '+GL[profile.goal]:''}`}>
+        {/* Servings + days controls */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'1.25rem',background:'var(--color-bg)',borderRadius:'12px',padding:'12px',border:`1px solid var(--color-border)`}}>
+          <div>
+            <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.07em',marginBottom:'8px'}}>Persons</div>
+            <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+              <button onClick={()=>setServings(s=>Math.max(1,s-1))} style={{width:'30px',height:'30px',borderRadius:'50%',border:`1px solid var(--color-border)`,background:'var(--color-surface)',cursor:'pointer',fontSize:'16px',fontWeight:'600',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--color-text)'}}>−</button>
+              <span style={{fontFamily:'var(--font-display)',fontSize:'20px',fontWeight:'600',minWidth:'24px',textAlign:'center' as const}}>{servings}</span>
+              <button onClick={()=>setServings(s=>Math.min(12,s+1))} style={{width:'30px',height:'30px',borderRadius:'50%',border:`1px solid var(--color-border)`,background:'var(--color-surface)',cursor:'pointer',fontSize:'16px',fontWeight:'600',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--color-text)'}}>+</button>
+            </div>
+          </div>
+          <div>
+            <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.07em',marginBottom:'8px'}}>Plan for days</div>
+            <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+              <button onClick={()=>setMealDays(d=>Math.max(1,d-1))} style={{width:'30px',height:'30px',borderRadius:'50%',border:`1px solid var(--color-border)`,background:'var(--color-surface)',cursor:'pointer',fontSize:'16px',fontWeight:'600',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--color-text)'}}>−</button>
+              <span style={{fontFamily:'var(--font-display)',fontSize:'20px',fontWeight:'600',minWidth:'24px',textAlign:'center' as const}}>{mealDays}</span>
+              <button onClick={()=>setMealDays(d=>Math.min(7,d+1))} style={{width:'30px',height:'30px',borderRadius:'50%',border:`1px solid var(--color-border)`,background:'var(--color-surface)',cursor:'pointer',fontSize:'16px',fontWeight:'600',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--color-text)'}}>+</button>
+            </div>
+          </div>
+        </div>
+        {servings > 1 && <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginBottom:'12px',textAlign:'center' as const}}>Ingredients will be scaled for {servings} people{mealDays>1?`, across ${mealDays} days`:''}</div>}
         <SL>Cuisine</SL>
         <div className="overflow-x-auto" style={{display:'flex',gap:'6px',marginBottom:'1rem',paddingBottom:'2px'}}>
           <div className={`chip pressable ${!mealFilters.cuisine?'active-green':''}`} onClick={()=>setMealFilters(f=>({...f,cuisine:null}))}>Any</div>
@@ -1107,7 +1170,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                 <span className="tag tag-amber">{meal.macros?.calories} kcal</span>
                 <span className="tag tag-green">{meal.macros?.protein}g protein</span>
               </div>
-              <div style={{fontSize:'11px',color:'var(--color-primary)',marginTop:'6px',opacity:.7}}>Tap to add to {DAYS[activeDay]}</div>
+              <div style={{fontSize:'11px',color:'var(--color-primary)',marginTop:'6px',opacity:.7}}>Tap to add to {activeDateLabel()}</div>
             </div>
             <button className="pressable" onClick={async(e)=>{e.stopPropagation();await handleSaveRecipe(meal)}} style={{position:'absolute' as const,top:'10px',right:'10px',background:'none',border:'none',cursor:'pointer',color:'var(--color-text-muted)'}}>
               <i className="ti ti-heart" style={{fontSize:'20px'}}/>

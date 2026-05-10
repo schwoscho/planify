@@ -4,18 +4,19 @@ const GL: Record<string,string> = { bulk:'Bulking', cut:'Cutting', maintain:'Bal
 const TARGET: Record<string,number> = { bulk:2700, cut:1750, maintain:2000, energy:2000, gut:1900 }
 
 interface DashboardProps {
-  user: any; profile: any; meals: Record<number,any>; foodLog: any[]
+  user: any; profile: any; meals: Record<string,any>; foodLog: any[]
   activityLog: any[]; waterToday: number; waterGoal: number; waterStreak: number
   weightLog: any[]; onAddMeal: ()=>void; onLogFood: ()=>void; onLogActivity: ()=>void
   onAddWater: (ml:number)=>void; onSwitchTab: (tab:string)=>void
-  onViewAllMeals: ()=>void; activeDay: number
+  onViewAllMeals: ()=>void; activeDate: string; activeDateLabel: string
   onGoToProfile: ()=>void; avatarEmoji: string
 }
 
-export default function Dashboard({ user, profile, meals, foodLog, activityLog, waterToday, waterGoal, waterStreak, weightLog, onAddMeal, onLogFood, onLogActivity, onAddWater, onSwitchTab, onViewAllMeals, activeDay, onGoToProfile, avatarEmoji }: DashboardProps) {
+export default function Dashboard({ user, profile, meals, foodLog, activityLog, waterToday, waterGoal, waterStreak, weightLog, onAddMeal, onLogFood, onLogActivity, onAddWater, onSwitchTab, onViewAllMeals, activeDate, activeDateLabel, onGoToProfile, avatarEmoji }: DashboardProps) {
   const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
   const tgt = profile?.tdee || TARGET[profile?.goal] || 2000
-  const todayMeal = meals[activeDay]
+  const todayMeal = meals[activeDate] || meals[Object.keys(meals)[0]] // today's or first planned
+  const activeMeal = meals[activeDate]
   const mealCals = todayMeal?.macros?.calories || 0
   const loggedCals = foodLog.reduce((a:number,x:any)=>a+(x.calories||0),0)
   const totalIn = mealCals + loggedCals
@@ -130,7 +131,7 @@ export default function Dashboard({ user, profile, meals, foodLog, activityLog, 
           <div className="pressable" onClick={onAddMeal}
             style={{background:'var(--color-bg)',borderRadius:'10px',padding:'12px',border:`1.5px dashed var(--color-border)`,display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
             <div style={{width:'32px',height:'32px',borderRadius:'50%',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px'}}>➕</div>
-            <span style={{fontSize:'13px',color:'var(--color-text-muted)'}}>No meal planned for {DAYS[activeDay]}</span>
+            <span style={{fontSize:'13px',color:'var(--color-text-muted)'}}>No meal planned for {activeDateLabel}</span>
           </div>
         )}
       </div>
@@ -179,23 +180,25 @@ export default function Dashboard({ user, profile, meals, foodLog, activityLog, 
         </div>
       </div>
 
-      {/* Weekly plan dots */}
+      {/* Next 7 days plan overview */}
       <div className="card anim-fade-slide">
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-          <div style={{fontSize:'13px',fontWeight:'500',color:'var(--color-text)'}}>📅 Weekly meal plan</div>
-          <span style={{fontSize:'12px',color:'var(--color-text-muted)'}}>{Object.keys(meals).length}/7 days</span>
+          <div style={{fontSize:'13px',fontWeight:'500',color:'var(--color-text)'}}>📅 Next 7 days</div>
+          <span style={{fontSize:'12px',color:'var(--color-text-muted)'}}>{Object.values(meals).filter(Boolean).length} planned</span>
         </div>
         <div style={{display:'flex',gap:'5px'}}>
-          {DAYS.map((d,i)=>(
-            <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
-              <div style={{width:'32px',height:'32px',borderRadius:'50%',background:meals[i]?'var(--color-primary)':i===activeDay?'var(--color-primary-pale)':'var(--color-bg)',border:`1.5px solid ${meals[i]?'var(--color-primary)':i===activeDay?'var(--color-primary-light)':'var(--color-border)'}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>
-                {meals[i]
-                  ? <span style={{fontSize:'14px'}}>✓</span>
-                  : <span style={{fontSize:'11px',color:i===activeDay?'var(--color-primary)':'var(--color-text-muted)'}}>{d[0]}</span>
-                }
+          {Array.from({length:7},(_,i)=>{
+            const d=new Date(); d.setDate(d.getDate()+i)
+            const dk=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+            const dayNames=['Su','Mo','Tu','We','Th','Fr','Sa']
+            return (
+              <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:'4px'}}>
+                <div style={{width:'32px',height:'32px',borderRadius:'50%',background:meals[dk]?'var(--color-primary)':i===0?'var(--color-primary-pale)':'var(--color-bg)',border:`1.5px solid ${meals[dk]?'var(--color-primary)':i===0?'var(--color-primary-light)':'var(--color-border)'}`,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>
+                  {meals[dk]?<span style={{fontSize:'14px'}}>✓</span>:<span style={{fontSize:'11px',color:i===0?'var(--color-primary)':'var(--color-text-muted)'}}>{dayNames[d.getDay()]}</span>}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>
