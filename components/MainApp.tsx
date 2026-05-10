@@ -1272,10 +1272,9 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         <nav className="bottom-nav">
           {TABS.map(t=>{
             const isActive=tab===t
-            const NAV_EMOJI: Record<string,string> = { home:'🏠', meals:'🥗', grocery:'🛒', tracker:'📊', health:'💧', assist:'🤖', profile:'👤' }
             return (
               <button key={t} className={`nav-btn ${isActive?'active':''}`} onClick={()=>switchTab(t)}>
-                <span style={{fontSize:'22px',lineHeight:1,display:'block',opacity:isActive?1:0.4,transition:'opacity .15s'}}>{NAV_EMOJI[t]}</span>
+                <i className={`ti ${TAB_ICONS[t]}`} style={{fontSize:'24px',color:isActive?'var(--primary)':'var(--text-3)',display:'block',lineHeight:1}}/>
                 <span className="nav-label">{TAB_LABELS[t]}</span>
               </button>
             )

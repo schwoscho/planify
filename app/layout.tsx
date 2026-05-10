@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import '@tabler/icons-webfont/tabler-icons.css'
 
 export const metadata: Metadata = {
   title: 'Planify — Your AI nutrition & meal planning companion',
@@ -19,12 +20,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="theme-color" content="#2D6A4F" />
         <link rel="apple-touch-icon" href="/images/icon.png" />
         <link rel="icon" type="image/png" href="/images/icon.png" />
-        {/* Tabler Icons — required for all UI icons */}
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.30.0/tabler-icons.min.css"
-          crossOrigin="anonymous"
-        />
         <script dangerouslySetInnerHTML={{
           __html: `(function(){try{var t=localStorage.getItem('planify-theme');var p=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t||p)}catch(e){}})()`
         }}/>
