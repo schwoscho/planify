@@ -6,7 +6,7 @@ const TARGET: Record<string,number> = { bulk:2700, cut:1750, maintain:2000, ener
 interface Props {
   user: any; profile: any; meals: Record<string,any>; foodLog: any[]
   activityLog: any[]; waterToday: number; waterGoal: number; waterStreak: number
-  weightLog: any[]; activeDate: string; activeDateLabel: string; avatarEmoji: string
+  weightLog: any[]; activeDate: string; activeDateLabel: string; avatarEmoji: string; avatarUrl?: string|null
   onAddMeal:()=>void; onLogFood:()=>void; onLogActivity:()=>void
   onAddWater:(ml:number)=>void; onSwitchTab:(tab:string)=>void
   onViewAllMeals:()=>void; onGoToProfile:()=>void
@@ -75,8 +75,11 @@ export default function Dashboard(p: Props) {
           </div>}
         </div>
         <div className="pressable" onClick={p.onGoToProfile}
-          style={{width:'46px',height:'46px',borderRadius:'50%',background:'var(--color-primary-pale)',border:`1.5px solid var(--color-primary-border)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'24px',cursor:'pointer',flexShrink:0}}>
-          {p.avatarEmoji}
+          style={{width:'46px',height:'46px',borderRadius:'50%',background:'var(--color-primary-pale)',border:`1.5px solid var(--color-primary-border)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'24px',cursor:'pointer',flexShrink:0,overflow:'hidden'}}>
+          {p.avatarUrl
+            ? <img src={p.avatarUrl} alt="Avatar" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+            : p.avatarEmoji
+          }
         </div>
       </div>
 
@@ -164,8 +167,8 @@ export default function Dashboard(p: Props) {
 
       {/* Planify Score — single clean card */}
       <div style={{background:'var(--color-surface)',border:`0.5px solid var(--color-border)`,borderRadius:'var(--radius-lg)',padding:'16px',overflow:'hidden',position:'relative' as const}}>
-        {/* Background accent */}
-        <div style={{position:'absolute' as const,top:0,right:0,width:'80px',height:'80px',background:scoreBg,borderRadius:'0 var(--radius-lg) 0 100%',opacity:.6}}/>
+        {/* Subtle background accent — very light */}
+        <div style={{position:'absolute' as const,top:0,right:0,width:'72px',height:'72px',background:scoreBg,borderRadius:'0 var(--radius-lg) 0 80%',opacity:.25,pointerEvents:'none' as const}}/>
         <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:'12px',position:'relative' as const}}>
           <div>
             <div style={{fontSize:'10px',fontWeight:'700',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'4px'}}>Planify Score</div>

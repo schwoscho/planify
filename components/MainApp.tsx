@@ -488,6 +488,8 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const [editModalOpen, setEditModalOpen] = useState<string|null>(null)
   const [editProfile, setEditProfile] = useState<any>({...profile})
   const [avatar, setAvatar] = useState(profile?.avatar||'🥗')
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url||null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────
 
@@ -813,6 +815,44 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     try { const u=await saveProfile(user.id,{...editProfile,avatar}); onProfileUpdate(u); setEditModalOpen(null) } catch(e){console.error(e)}
   }
 
+  async function uploadAvatar(file: File) {
+    if (!file.type.startsWith('image/')) return
+    setAvatarUploading(true)
+    try {
+      const { supabase } = await import('@/lib/supabase')
+      // Compress to max 400px and convert to webp
+      const compressed = await compressImage(file, 400)
+      const path = `${user.id}/avatar.webp`
+      const { error } = await supabase.storage.from('avatars').upload(path, compressed, { upsert: true, contentType: 'image/webp' })
+      if (error) throw error
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      const url = data.publicUrl + '?t=' + Date.now() // cache bust
+      setAvatarUrl(url)
+      const u = await saveProfile(user.id, { ...profile, avatar_url: url })
+      onProfileUpdate(u)
+      setEditModalOpen(null)
+    } catch(e) { console.error('Avatar upload failed:', e) }
+    setAvatarUploading(false)
+  }
+
+  function compressImage(file: File, maxSize: number): Promise<Blob> {
+    return new Promise((resolve) => {
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        URL.revokeObjectURL(url)
+        canvas.toBlob(b => resolve(b!), 'image/webp', 0.85)
+      }
+      img.src = url
+    })
+  }
+
   async function saveAccountField(field:string, value:string) {
     try { const u=await saveProfile(user.id,{...profile,[field]:value}); onProfileUpdate(u) } catch(e){console.error(e)}
   }
@@ -826,7 +866,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         foodLog={foodLog} activityLog={activityLog}
         waterToday={waterToday} waterGoal={waterGoal} waterStreak={waterStreak}
         weightLog={weightLog} activeDate={activeDate} activeDateLabel={activeDateLabel()}
-        avatarEmoji={profile?.avatar||avatar||'🥗'}
+        avatarEmoji={profile?.avatar||avatar} avatarUrl={avatarUrl||profile?.avatar_url||null}
         onAddMeal={()=>{setDraftFilters({...mealFilters});setDraftAvoid(avoidInput);setMealModalOpen(true);setMealSuggestions([])}}
         onLogFood={()=>{setLogResult(null);setLogModalOpen(true)}}
         onLogActivity={()=>setActModalOpen(true)}
@@ -1372,10 +1412,13 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         {/* Hero */}
         <div style={{textAlign:'center' as const,marginBottom:'1.75rem',paddingTop:'1rem'}}>
           <div className="pressable" onClick={()=>setEditModalOpen('avatar')}
-            style={{width:'88px',height:'88px',borderRadius:'50%',background:'var(--color-primary-pale)',border:`2px solid var(--color-primary-border)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'40px',margin:'0 auto 12px',cursor:'pointer',position:'relative' as const}}>
-            {profile?.avatar||avatar}
-            <div style={{position:'absolute' as const,bottom:0,right:0,width:'24px',height:'24px',borderRadius:'50%',background:'var(--color-surface)',border:`0.5px solid var(--color-border)`,display:'flex',alignItems:'center',justifyContent:'center'}}>
-              <i className="ti ti-pencil" style={{fontSize:'11px',color:'var(--color-text-muted)'}}/>
+            style={{width:'88px',height:'88px',borderRadius:'50%',background:'var(--color-primary-pale)',border:`2px solid var(--color-primary-border)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'40px',margin:'0 auto 12px',cursor:'pointer',position:'relative' as const,overflow:'hidden'}}>
+            {(avatarUrl||profile?.avatar_url)
+              ? <img src={avatarUrl||profile?.avatar_url} alt="Avatar" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'50%'}}/>
+              : <span>{profile?.avatar||avatar}</span>
+            }
+            <div style={{position:'absolute' as const,bottom:0,right:0,width:'26px',height:'26px',borderRadius:'50%',background:'var(--color-primary)',display:'flex',alignItems:'center',justifyContent:'center',border:`2px solid var(--color-surface)`}}>
+              <i className="ti ti-camera" style={{fontSize:'12px',color:'#fff'}}/>
             </div>
           </div>
           <div style={{fontFamily:'var(--font-display)',fontSize:'24px',color:'var(--color-text)'}}>{profile?.username||displayName}</div>
@@ -2000,7 +2043,42 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       </Modal>
 
       {/* ── AVATAR MODAL ── */}
-      <Modal open={editModalOpen==='avatar'} onClose={()=>setEditModalOpen(null)} title="Choose your avatar">
+      <Modal open={editModalOpen==='avatar'} onClose={()=>setEditModalOpen(null)} title="Profile photo">
+
+        {/* Current avatar preview */}
+        <div style={{textAlign:'center' as const,marginBottom:'1.25rem'}}>
+          <div style={{width:'80px',height:'80px',borderRadius:'50%',background:'var(--color-primary-pale)',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'36px',overflow:'hidden',border:`2px solid var(--color-primary-border)`}}>
+            {(avatarUrl||profile?.avatar_url)
+              ? <img src={avatarUrl||profile?.avatar_url} alt="Current" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+              : <span>{avatar}</span>
+            }
+          </div>
+        </div>
+
+        {/* Photo upload option */}
+        <button onClick={()=>{ const i=document.createElement('input'); i.type='file'; i.accept='image/*'; i.onchange=()=>{const f=i.files?.[0]; if(f)uploadAvatar(f)}; i.click() }}
+          disabled={avatarUploading}
+          style={{width:'100%',padding:'14px',background:'var(--color-primary-pale)',border:`1.5px solid var(--color-primary-border)`,borderRadius:'var(--radius-lg)',display:'flex',alignItems:'center',gap:'12px',cursor:'pointer',marginBottom:'1.25rem',fontFamily:'var(--font-body)'}}>
+          <div style={{width:'40px',height:'40px',borderRadius:'50%',background:'var(--color-primary)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            {avatarUploading
+              ? <i className="ti ti-loader-2 ti-spin" style={{fontSize:'18px',color:'#fff'}}/>
+              : <i className="ti ti-upload" style={{fontSize:'18px',color:'#fff'}}/>
+            }
+          </div>
+          <div style={{textAlign:'left' as const}}>
+            <div style={{fontSize:'14px',fontWeight:'600',color:'var(--color-primary)'}}>{avatarUploading?'Uploading...':'Upload a photo'}</div>
+            <div style={{fontSize:'11px',color:'var(--color-primary)',opacity:.7,marginTop:'2px'}}>JPG, PNG or HEIC · auto-compressed</div>
+          </div>
+        </button>
+
+        {/* Divider */}
+        <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'1rem'}}>
+          <div style={{flex:1,height:'0.5px',background:'var(--color-border)'}}/>
+          <span style={{fontSize:'11px',color:'var(--color-text-muted)',fontWeight:'500'}}>OR CHOOSE AN EMOJI</span>
+          <div style={{flex:1,height:'0.5px',background:'var(--color-border)'}}/>
+        </div>
+
+        {/* Emoji grid */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'10px',marginBottom:'1rem'}}>
           {AVATARS.map(a=>(
             <div key={a} className="pressable" onClick={()=>setAvatar(a)}
@@ -2009,8 +2087,13 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             </div>
           ))}
         </div>
-        <button className="btn-primary pressable" onClick={async()=>{try{const u=await saveProfile(user.id,{...profile,avatar});onProfileUpdate(u);setEditModalOpen(null)}catch(e){}}}>
-          <i className="ti ti-check" style={{fontSize:'16px'}}/>Save avatar
+        <button className="btn-primary pressable" onClick={async()=>{
+          try {
+            const u=await saveProfile(user.id,{...profile,avatar,avatar_url:null})
+            setAvatarUrl(null); onProfileUpdate(u); setEditModalOpen(null)
+          } catch(e){}
+        }}>
+          <i className="ti ti-check" style={{fontSize:'16px'}}/>Use this emoji
         </button>
         <button className="btn-ghost" onClick={()=>setEditModalOpen(null)} style={{marginTop:'8px'}}>Cancel</button>
       </Modal>
