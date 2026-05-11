@@ -28,10 +28,22 @@ export default function Dashboard(p: Props) {
 
   const macroProtein = p.profile?.protein_target || Math.round(tgt*0.3/4)
   const macroCarbs   = p.profile?.carbs_target   || Math.round(tgt*0.4/4)
-  const macroFat     = p.profile?.fat_target      || Math.round(tgt*0.3/9)
+
+  // ── Planify Score (0–100) ──────────────────────────────────────────────
+  // Weighted: calories 30%, protein 30%, water 25%, activity 15%
   const logP = p.foodLog.reduce((a:number,x:any)=>a+(x.protein||0),0)
+  const calScore   = net>0 ? Math.round(Math.max(0, 1 - Math.abs(net-tgt)/tgt) * 30) : 0
+  const protScore  = logP>0 ? Math.round(Math.min(logP/macroProtein, 1) * 30) : 0
+  const waterScore = Math.round(waterPct * 25)
+  const actScore   = p.activityLog.length>0 ? 15 : 0
+  const planifyScore = calScore + protScore + waterScore + actScore
+  const macroFat     = p.profile?.fat_target      || Math.round(tgt*0.3/9)
   const logC = p.foodLog.reduce((a:number,x:any)=>a+(x.carbs||0),0)
   const logF = p.foodLog.reduce((a:number,x:any)=>a+(x.fat||0),0)
+
+  const scoreColor = planifyScore>=80?'var(--color-primary)':planifyScore>=50?'var(--color-amber)':'var(--color-red)'
+  const scoreLabel = planifyScore>=80?'Excellent':planifyScore>=60?'Great':planifyScore>=40?'Good':planifyScore>=20?'Getting there':'Just starting'
+  const scoreBg    = planifyScore>=80?'var(--primary-pale)':planifyScore>=50?'var(--amber-bg)':'var(--red-bg)'
 
   const hour = new Date().getHours()
   const greeting = hour<12?'Good morning':hour<17?'Good afternoon':'Good evening'
@@ -149,6 +161,56 @@ export default function Dashboard(p: Props) {
           </div>
         )
       })()}
+
+      {/* Planify Score — single clean card */}
+      <div style={{background:'var(--color-surface)',border:`0.5px solid var(--color-border)`,borderRadius:'var(--radius-lg)',padding:'16px',overflow:'hidden',position:'relative' as const}}>
+        {/* Background accent */}
+        <div style={{position:'absolute' as const,top:0,right:0,width:'80px',height:'80px',background:scoreBg,borderRadius:'0 var(--radius-lg) 0 100%',opacity:.6}}/>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:'12px',position:'relative' as const}}>
+          <div>
+            <div style={{fontSize:'10px',fontWeight:'700',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'4px'}}>Planify Score</div>
+            <div style={{display:'flex',alignItems:'baseline',gap:'4px'}}>
+              <span style={{fontFamily:'var(--font-display)',fontSize:'40px',fontWeight:'600',color:scoreColor,lineHeight:1}}>{planifyScore}</span>
+              <span style={{fontSize:'13px',color:'var(--color-text-muted)',marginBottom:'2px'}}>/100</span>
+            </div>
+            <div style={{fontSize:'12px',fontWeight:'600',color:scoreColor,marginTop:'2px'}}>{scoreLabel}</div>
+          </div>
+          {/* Ring visualization */}
+          <svg width="64" height="64" viewBox="0 0 64 64" style={{flexShrink:0}}>
+            <circle cx="32" cy="32" r="26" fill="none" stroke="var(--color-border)" strokeWidth="7"/>
+            <circle cx="32" cy="32" r="26" fill="none" stroke={scoreColor} strokeWidth="7"
+              strokeDasharray={`${(planifyScore/100)*2*Math.PI*26} ${2*Math.PI*26}`}
+              strokeLinecap="round" transform="rotate(-90 32 32)"
+              style={{transition:'stroke-dasharray .8s ease'}}/>
+            <text x="32" y="37" textAnchor="middle" fontSize="13" fontWeight="700"
+              fill={scoreColor} fontFamily="var(--font-display)">{planifyScore}</text>
+          </svg>
+        </div>
+        {/* Breakdown bars */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
+          {[
+            {label:'Calories', score:calScore,  max:30, color:'var(--color-amber)'},
+            {label:'Protein',  score:protScore, max:30, color:'var(--color-primary)'},
+            {label:'Water',    score:waterScore,max:25, color:'var(--color-cyan)'},
+            {label:'Activity', score:actScore,  max:15, color:'var(--color-red)'},
+          ].map(s=>(
+            <div key={s.label}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:'3px'}}>
+                <span style={{fontSize:'10px',color:'var(--color-text-muted)'}}>{s.label}</span>
+                <span style={{fontSize:'10px',fontWeight:'600',color:s.color}}>{s.score}/{s.max}</span>
+              </div>
+              <div style={{height:'4px',background:'var(--color-border)',borderRadius:'2px',overflow:'hidden'}}>
+                <div style={{height:'100%',width:`${(s.score/s.max)*100}%`,background:s.color,borderRadius:'2px',transition:'width .6s ease'}}/>
+              </div>
+            </div>
+          ))}
+        </div>
+        {planifyScore===0&&(
+          <div style={{marginTop:'10px',fontSize:'12px',color:'var(--color-text-muted)',textAlign:'center' as const}}>
+            Log a meal, drink water, or add activity to start earning points
+          </div>
+        )}
+      </div>
 
       {/* Quick actions */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
