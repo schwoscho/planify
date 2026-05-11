@@ -356,8 +356,22 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   // Meal planning — date-based
   const [activeDate, setActiveDate] = useState(todayKey())
   const [meals, setMeals] = useState<Record<string,any>>({})
-  const [servings, setServings] = useState(profile?.default_servings||2)
-  const [mealDays, setMealDays] = useState(1)
+  const [servings, setServingsRaw] = useState<number>(()=>{
+    try { return parseInt(localStorage.getItem('planify-servings')||'') || profile?.default_servings || 2 } catch { return 2 }
+  })
+  const [mealDays, setMealDaysRaw] = useState<number>(()=>{
+    try { return parseInt(localStorage.getItem('planify-mealdays')||'') || 1 } catch { return 1 }
+  })
+  function setServings(v: number|(((s:number)=>number))) {
+    const next = typeof v === 'function' ? v(servings) : v
+    setServingsRaw(next)
+    try { localStorage.setItem('planify-servings', String(next)) } catch {}
+  }
+  function setMealDays(v: number|(((d:number)=>number))) {
+    const next = typeof v === 'function' ? v(mealDays) : v
+    setMealDaysRaw(next)
+    try { localStorage.setItem('planify-mealdays', String(next)) } catch {}
+  }
   const [showSaved, setShowSaved] = useState(false)
 
   // Logs
@@ -404,6 +418,8 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
   // Coach
   const [chatHistory, setChatHistory] = useState<any[]>([])
+  const [historyLoaded, setHistoryLoaded] = useState(false)
+  const MAX_HISTORY = 30 // max messages stored per user
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
@@ -433,6 +449,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     if(t===tab) return
     setTab(t); setTabKey(k=>k+1)
     if(t!=='profile') setProfileSubPage(null)
+    if(t==='assist'&&!historyLoaded) loadSageHistory()
   }
   function viewAllMeals() { setShowSaved(false); switchTab('meals') }
 
@@ -487,6 +504,22 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   async function loadWeight() { try { setWeightLog(await getWeightLog(user.id)||[]) } catch(e){console.error(e)} }
   async function loadActivity() { try { setActivityLog(await getActivityLog(user.id,todayKey())||[]) } catch(e){console.error(e)} }
   async function loadSavedRecipes() { try { setSavedRecipes(await getSavedRecipes(user.id)||[]) } catch(e){console.error(e)} }
+  async function loadSageHistory() {
+    try {
+      const { supabase } = await import('@/lib/supabase')
+      const { data } = await supabase.from('sage_history').select('messages').eq('user_id', user.id).single()
+      if (data?.messages?.length) setChatHistory(data.messages)
+    } catch {} // No history yet is fine
+    setHistoryLoaded(true)
+  }
+
+  async function saveSageHistory(msgs: any[]) {
+    try {
+      const trimmed = msgs.slice(-MAX_HISTORY) // keep last 30 messages
+      const { supabase } = await import('@/lib/supabase')
+      await supabase.from('sage_history').upsert({ user_id: user.id, messages: trimmed, updated_at: new Date().toISOString() })
+    } catch(e) { console.error(e) }
+  }
 
   async function loadMealRatings(names: string[]) {
     if (!names.length) return
@@ -675,9 +708,11 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     setChatHistory(newHistory); setChatLoading(true)
     try {
       const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({messages:newHistory,profile,mealSummary:Object.entries(meals).map(([dk,m]:any)=>`${dk}: ${m.name}`).join(', ')})})
+        body:JSON.stringify({messages:newHistory.slice(-20),profile,mealSummary:Object.entries(meals).map(([dk,m]:any)=>`${dk}: ${m.name}`).join(', ')})})
       const data=await res.json()
-      setChatHistory([...newHistory,{role:'assistant',content:data.reply}])
+      const updated=[...newHistory,{role:'assistant',content:data.reply}]
+      setChatHistory(updated)
+      saveSageHistory(updated) // persist in background
     } catch(e){console.error(e)}
     setChatLoading(false)
   }
@@ -1144,8 +1179,36 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
   function renderAssist() {
     const CHIPS=[['Meal ideas','What should I eat today?'],['My macros','How are my macros looking?'],['Meal plan','Can you help me plan my meals for the week?'],['Water tips','Tips to drink more water']]
+
+    async function clearHistory() {
+      setChatHistory([])
+      try {
+        const { supabase } = await import('@/lib/supabase')
+        await supabase.from('sage_history').upsert({ user_id: user.id, messages: [], updated_at: new Date().toISOString() })
+      } catch(e) { console.error(e) }
+    }
+
     return (
       <div key={tabKey} style={{display:'flex',flexDirection:'column',flex:1,height:'100%'}}>
+        {/* Header */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 1.25rem',borderBottom:`0.5px solid var(--color-border)`,background:'var(--color-surface)',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+            <div style={{width:'32px',height:'32px',borderRadius:'50%',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <i className="ti ti-robot" style={{fontSize:'16px',color:'var(--color-primary)'}}/>
+            </div>
+            <div>
+              <div style={{fontSize:'14px',fontWeight:'600',color:'var(--color-text)'}}>{COACH_NAME}</div>
+              <div style={{fontSize:'11px',color:'var(--color-primary)',opacity:.7}}>Your nutrition coach</div>
+            </div>
+          </div>
+          {chatHistory.length>0&&(
+            <button onClick={clearHistory}
+              style={{fontSize:'12px',color:'var(--color-text-muted)',background:'none',border:`0.5px solid var(--color-border)`,borderRadius:'var(--radius-md)',padding:'5px 10px',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',gap:'4px'}}>
+              <i className="ti ti-trash" style={{fontSize:'12px'}}/>Clear
+            </button>
+          )}
+        </div>
+
         <div style={{flex:1,overflowY:'auto',padding:'1rem 1.25rem',display:'flex',flexDirection:'column',gap:'10px'}}>
           {!chatHistory.length&&(
             <div className="anim-fade-up" style={{alignSelf:'flex-start',maxWidth:'85%'}}>
@@ -1160,6 +1223,13 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                   {CHIPS.map(([l,q])=><div key={l} className="suggest-chip" onClick={()=>sendChat(q)}>{l}</div>)}
                 </div>
               </div>
+            </div>
+          )}
+          {chatHistory.length>4&&(
+            <div style={{textAlign:'center' as const,margin:'4px 0'}}>
+              <span style={{fontSize:'10px',color:'var(--color-text-muted)',background:'var(--color-surface)',padding:'3px 10px',borderRadius:'20px',border:`0.5px solid var(--color-border)`}}>
+                Your conversation history · last {chatHistory.length} messages
+              </span>
             </div>
           )}
           {chatHistory.map((msg:any,i:number)=>(
@@ -1688,6 +1758,15 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             <button className="btn-primary pressable" onClick={addScannedFood}>
               <i className="ti ti-plus" style={{fontSize:'15px'}}/>Add to food log
             </button>
+            {/* Fallback */}
+            <div style={{marginTop:'12px',padding:'10px 12px',background:'var(--color-surface)',borderRadius:'var(--radius-md)',border:`0.5px solid var(--color-border)`}}>
+              <div style={{fontSize:'12px',fontWeight:'500',color:'var(--color-text)',marginBottom:'4px'}}>Not what you were looking for?</div>
+              <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginBottom:'8px'}}>Barcode lookup isn't always 100% accurate. You can search by product name instead:</div>
+              <button onClick={()=>{setScannerOpen(false);setLogModalOpen(true)}}
+                style={{fontSize:'12px',color:'var(--color-primary)',background:'none',border:'none',cursor:'pointer',fontFamily:'var(--font-body)',fontWeight:'500',display:'flex',alignItems:'center',gap:'4px',padding:0}}>
+                <i className="ti ti-search" style={{fontSize:'13px'}}/>Search by name instead →
+              </button>
+            </div>
           </div>
         )}
         <button className="btn-ghost" onClick={()=>setScannerOpen(false)} style={{marginTop:'8px'}}>Cancel</button>
