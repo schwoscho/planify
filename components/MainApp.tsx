@@ -23,11 +23,10 @@ function BarcodeScanner({ onResult }: { onResult: (code:string)=>void }) {
 
   async function startCamera() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'environment', width:{ideal:1280}, height:{ideal:720} } })
       streamRef.current = stream
       if (videoRef.current) videoRef.current.srcObject = stream
       setCameraActive(true)
-      // Dynamically load ZXing for camera scanning
       const { BrowserMultiFormatReader } = await import('@zxing/library' as any).catch(()=>({ BrowserMultiFormatReader: null }))
       if (BrowserMultiFormatReader && videoRef.current) {
         const reader = new BrowserMultiFormatReader()
@@ -48,35 +47,72 @@ function BarcodeScanner({ onResult }: { onResult: (code:string)=>void }) {
   return (
     <div style={{marginBottom:'1rem'}}>
       {cameraActive ? (
-        <div style={{position:'relative' as const,marginBottom:'1rem'}}>
-          <video ref={videoRef} autoPlay playsInline muted
-            style={{width:'100%',borderRadius:'var(--radius-lg)',background:'#000',display:'block'}}/>
-          <div style={{position:'absolute' as const,inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none' as const}}>
-            <div style={{width:'200px',height:'80px',border:'2px solid var(--color-primary)',borderRadius:'8px',boxShadow:'0 0 0 1000px rgba(0,0,0,.4)'}}/>
+        <div style={{marginBottom:'1.25rem'}}>
+          <div style={{position:'relative' as const,borderRadius:'var(--radius-lg)',overflow:'hidden',background:'#000',marginBottom:'8px'}}>
+            <video ref={videoRef} autoPlay playsInline muted style={{width:'100%',display:'block',maxHeight:'220px',objectFit:'cover'}}/>
+            <div style={{position:'absolute' as const,inset:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <div style={{width:'220px',height:'90px',border:'2.5px solid var(--color-primary)',borderRadius:'10px',boxShadow:'0 0 0 9999px rgba(0,0,0,.55)'}}/>
+            </div>
+            <div style={{position:'absolute' as const,bottom:'10px',left:0,right:0,textAlign:'center' as const}}>
+              <span style={{background:'rgba(0,0,0,.65)',color:'#fff',fontSize:'11px',padding:'4px 12px',borderRadius:'20px'}}>Align barcode in the box</span>
+            </div>
           </div>
-          <button className="btn-ghost pressable" onClick={stopCamera} style={{marginTop:'8px',width:'100%'}}>Stop camera</button>
+          <button onClick={stopCamera} style={{width:'100%',padding:'11px',background:'transparent',border:`1px solid var(--color-border)`,borderRadius:'var(--radius-md)',fontSize:'13px',color:'var(--color-text-muted)',cursor:'pointer',fontFamily:'var(--font-body)'}}>
+            Stop camera
+          </button>
         </div>
       ) : (
         <button className="pressable" onClick={startCamera}
-          style={{width:'100%',padding:'14px',background:'var(--color-surface-2)',border:`1px dashed var(--color-border)`,borderRadius:'var(--radius-lg)',display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',cursor:'pointer',marginBottom:'1rem',fontFamily:'var(--font-body)'}}>
-          <i className="ti ti-camera" style={{fontSize:'22px',color:'var(--color-primary)'}}/>
-          <div style={{textAlign:'left' as const}}>
-            <div style={{fontSize:'13px',fontWeight:'500',color:'var(--color-text)'}}>Use camera</div>
-            <div style={{fontSize:'11px',color:'var(--color-text-muted)'}}>Point at any product barcode</div>
+          style={{width:'100%',padding:'16px 18px',background:'var(--color-primary-pale)',border:`1.5px solid var(--color-primary-border)`,borderRadius:'var(--radius-lg)',display:'flex',alignItems:'center',gap:'14px',cursor:'pointer',marginBottom:'1.25rem',fontFamily:'var(--font-body)'}}>
+          <div style={{width:'46px',height:'46px',borderRadius:'50%',background:'var(--color-primary)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <i className="ti ti-camera" style={{fontSize:'22px',color:'#fff'}}/>
           </div>
+          <div style={{textAlign:'left' as const,flex:1}}>
+            <div style={{fontSize:'14px',fontWeight:'600',color:'var(--color-primary)'}}>Scan with camera</div>
+            <div style={{fontSize:'12px',color:'var(--color-primary)',opacity:.7,marginTop:'2px'}}>Point at any product barcode</div>
+          </div>
+          <i className="ti ti-chevron-right" style={{fontSize:'16px',color:'var(--color-primary)',opacity:.6}}/>
         </button>
       )}
-      <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.07em',marginBottom:'6px'}}>Or type barcode number</div>
-      <div style={{display:'flex',gap:'8px'}}>
-        <input value={manualCode} onChange={e=>setManualCode(e.target.value.replace(/\D/g,''))}
-          onKeyDown={e=>e.key==='Enter'&&manualCode.length>=8&&onResult(manualCode)}
-          placeholder="e.g. 5000112546805" className="input" style={{flex:1,marginBottom:0,letterSpacing:'1px'}}
-          inputMode="numeric"/>
-        <button className="btn-primary pressable" onClick={()=>manualCode.length>=8&&onResult(manualCode)} disabled={manualCode.length<8}
-          style={{padding:'10px 16px',whiteSpace:'nowrap' as const}}>
-          <i className="ti ti-search" style={{fontSize:'16px'}}/>
+
+      <div style={{fontSize:'11px',fontWeight:'700',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'10px'}}>Or type barcode number</div>
+      <div style={{display:'flex',gap:'10px',alignItems:'stretch'}}>
+        <input
+          value={manualCode}
+          onChange={e=>setManualCode(e.target.value.replace(/\D/g,''))}
+          onKeyDown={e=>e.key==='Enter'&&manualCode.length>=6&&onResult(manualCode)}
+          placeholder="20047238"
+          inputMode="numeric"
+          autoComplete="off"
+          style={{
+            flex:1, padding:'14px 16px',
+            fontSize:'22px', fontWeight:'700', letterSpacing:'3px',
+            borderRadius:'var(--radius-md)',
+            border:`2px solid ${manualCode.length>=6?'var(--color-primary)':'var(--color-border)'}`,
+            background:'var(--color-surface)',
+            color:'var(--color-text)',
+            fontFamily:'monospace',
+            outline:'none',
+            transition:'border-color .15s',
+            minWidth:0,
+          }}
+        />
+        <button
+          onClick={()=>manualCode.length>=6&&onResult(manualCode)}
+          disabled={manualCode.length<6}
+          style={{
+            width:'54px', borderRadius:'var(--radius-md)',
+            background:manualCode.length>=6?'var(--color-primary)':'var(--color-border)',
+            border:'none', cursor:manualCode.length>=6?'pointer':'not-allowed',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            flexShrink:0, transition:'background .15s',
+          }}>
+          <i className="ti ti-search" style={{fontSize:'22px',color:'#fff'}}/>
         </button>
       </div>
+      {manualCode.length>0&&manualCode.length<6&&(
+        <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginTop:'6px'}}>Barcodes are 6–13 digits</div>
+      )}
     </div>
   )
 }
@@ -521,27 +557,52 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   async function lookupBarcode(barcode: string) {
     setScanError(''); setScanResult(null)
     try {
-      const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}?fields=product_name,nutriments,serving_size,brands`)
+      // Try exact barcode first, then search by name if not found
+      const res = await fetch(
+        `https://world.openfoodfacts.org/api/v2/product/${barcode}?fields=product_name,nutriments,serving_size,serving_quantity,brands,quantity,nutriscore_grade`,
+        { headers: { 'User-Agent': 'Planify/1.0' } }
+      )
       const data = await res.json()
-      if (data.status !== 1) { setScanError('Product not found. Try another barcode.'); return }
-      const p = data.product
-      const n = p.nutriments || {}
+      if (data.status !== 1 || !data.product) {
+        setScanError('Product not found in Open Food Facts database. Try typing the product name in the food search instead.')
+        return
+      }
+      const prod = data.product
+      const n = prod.nutriments || {}
+
+      // Helper: get per-serving value first, fall back to per-100g
+      const val = (key: string) => {
+        const srv = n[`${key}_serving`]
+        const h = n[`${key}_100g`]
+        if (srv !== undefined && srv !== null) return Math.round(srv * 10) / 10
+        if (h !== undefined && h !== null) return Math.round(h * 10) / 10
+        return null
+      }
+
       const result = {
-        name: p.product_name || p.brands || 'Unknown product',
-        portion: p.serving_size || '100g',
-        calories: Math.round(n['energy-kcal_serving'] || n['energy-kcal_100g'] || 0),
-        protein: Math.round((n['proteins_serving'] || n['proteins_100g'] || 0) * 10) / 10,
-        carbs: Math.round((n['carbohydrates_serving'] || n['carbohydrates_100g'] || 0) * 10) / 10,
-        fat: Math.round((n['fat_serving'] || n['fat_100g'] || 0) * 10) / 10,
+        name: prod.product_name || prod.brands || 'Unknown product',
+        portion: prod.serving_size || prod.quantity || '100g',
+        calories:      Math.round(val('energy-kcal') || 0),
+        protein:       val('proteins') ?? 0,
+        carbs:         val('carbohydrates') ?? 0,
+        fat:           val('fat') ?? 0,
+        sugar:         val('sugars'),
+        fiber:         val('fiber'),
+        saturatedFat:  val('saturated-fat'),
+        salt:          val('salt'),
+        sodium:        val('sodium'),
+        nutriscore:    prod.nutriscore_grade?.toUpperCase() || null,
       }
       setScanResult(result)
-    } catch(e) { setScanError('Could not reach Open Food Facts. Check your connection.') }
+    } catch(e) {
+      setScanError('Could not reach Open Food Facts. Check your internet connection.')
+    }
   }
 
   async function addScannedFood() {
     if (!scanResult) return
     try {
-      await addFoodLog(user.id, { date: todayKey(), mealTime: foodMealTime, ...scanResult })
+      await addFoodLog(user.id, { date: todayKey(), mealTime: foodMealTime, name: scanResult.name, portion: scanResult.portion, calories: scanResult.calories, protein: scanResult.protein, carbs: scanResult.carbs, fat: scanResult.fat })
       await loadFoodLog()
       setScanResult(null); setScannerOpen(false); setScanError('')
       setLogResult(scanResult)
@@ -1575,17 +1636,55 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           </div>
         )}
         {scanResult&&(
-          <div className="anim-scale-in" style={{background:'var(--color-primary-pale)',border:`0.5px solid var(--color-primary-border)`,borderRadius:'var(--radius-lg)',padding:'14px',marginBottom:'1rem'}}>
-            <div style={{fontFamily:'var(--font-display)',fontSize:'15px',fontWeight:'600',marginBottom:'4px'}}>{scanResult.name}</div>
-            <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginBottom:'10px'}}>{scanResult.portion}</div>
-            <div style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
-              {[{l:'Calories',v:`${scanResult.calories} kcal`,c:'var(--color-amber)'},{l:'Protein',v:`${scanResult.protein}g`,c:'var(--color-primary)'},{l:'Carbs',v:`${scanResult.carbs}g`,c:'var(--color-blue)'},{l:'Fat',v:`${scanResult.fat}g`,c:'var(--color-amber)'}].map(m=>(
-                <div key={m.l} style={{flex:1,textAlign:'center' as const,background:'var(--color-bg)',borderRadius:'var(--radius-md)',padding:'8px 4px'}}>
-                  <div style={{fontSize:'14px',fontWeight:'600',color:m.c}}>{m.v}</div>
-                  <div style={{fontSize:'10px',color:'var(--color-text-muted)',marginTop:'2px',textTransform:'uppercase' as const}}>{m.l}</div>
+          <div className="anim-scale-in" style={{background:'var(--color-primary-pale)',border:`0.5px solid var(--color-primary-border)`,borderRadius:'var(--radius-lg)',padding:'16px',marginBottom:'1rem'}}>
+            {/* Product header */}
+            <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:'12px',gap:'10px'}}>
+              <div>
+                <div style={{fontFamily:'var(--font-display)',fontSize:'16px',fontWeight:'600',color:'var(--color-text)',marginBottom:'2px'}}>{scanResult.name}</div>
+                <div style={{fontSize:'12px',color:'var(--color-text-muted)'}}>Per {scanResult.portion}</div>
+              </div>
+              {scanResult.nutriscore&&(
+                <div style={{width:'32px',height:'32px',borderRadius:'8px',background:{'A':'#038141','B':'#85BB2F','C':'#FFCD00','D':'#EE8100','E':'#E63312'}[scanResult.nutriscore]||'var(--color-border)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'800',fontSize:'16px',color:'#fff',flexShrink:0}}>
+                  {scanResult.nutriscore}
+                </div>
+              )}
+            </div>
+
+            {/* Main macros */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'6px',marginBottom:'10px'}}>
+              {[
+                {l:'Calories',v:`${scanResult.calories}`,unit:'kcal',c:'var(--color-amber)'},
+                {l:'Protein', v:`${scanResult.protein}`,unit:'g',   c:'var(--color-primary)'},
+                {l:'Carbs',   v:`${scanResult.carbs}`,  unit:'g',   c:'var(--color-blue)'},
+                {l:'Fat',     v:`${scanResult.fat}`,    unit:'g',   c:'var(--color-amber)'},
+              ].map(m=>(
+                <div key={m.l} style={{background:'var(--color-surface)',borderRadius:'var(--radius-md)',padding:'8px 4px',textAlign:'center' as const}}>
+                  <div style={{fontSize:'15px',fontWeight:'700',color:m.c,lineHeight:1}}>{m.v}<span style={{fontSize:'10px',fontWeight:'400',color:'var(--color-text-muted)'}}>{m.unit}</span></div>
+                  <div style={{fontSize:'9px',color:'var(--color-text-muted)',marginTop:'3px',textTransform:'uppercase' as const,letterSpacing:'.04em'}}>{m.l}</div>
                 </div>
               ))}
             </div>
+
+            {/* Extra nutrition details */}
+            {(scanResult.sugar!==null||scanResult.fiber!==null||scanResult.saturatedFat!==null||scanResult.salt!==null)&&(
+              <div style={{borderTop:`0.5px solid var(--color-primary-border)`,paddingTop:'10px',marginBottom:'12px'}}>
+                <div style={{fontSize:'10px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.07em',marginBottom:'6px'}}>More details</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'4px 12px'}}>
+                  {[
+                    {l:'of which sugars',  v:scanResult.sugar,        show:scanResult.sugar!==null},
+                    {l:'Saturated fat',    v:scanResult.saturatedFat, show:scanResult.saturatedFat!==null},
+                    {l:'Fiber',            v:scanResult.fiber,        show:scanResult.fiber!==null},
+                    {l:'Salt',             v:scanResult.salt,         show:scanResult.salt!==null},
+                  ].filter(r=>r.show).map(r=>(
+                    <div key={r.l} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'3px 0',borderBottom:`0.5px solid var(--color-primary-border)`}}>
+                      <span style={{fontSize:'11px',color:'var(--color-text-muted)'}}>{r.l}</span>
+                      <span style={{fontSize:'12px',fontWeight:'500',color:'var(--color-text)'}}>{r.v}g</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <button className="btn-primary pressable" onClick={addScannedFood}>
               <i className="ti ti-plus" style={{fontSize:'15px'}}/>Add to food log
             </button>
