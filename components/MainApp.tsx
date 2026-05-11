@@ -14,7 +14,72 @@ import {
 } from '@/lib/db'
 import Dashboard from './Dashboard'
 
-// ── Star Rating Component ──────────────────────────────────────────────────
+// ── Barcode Scanner Component ─────────────────────────────────────────────
+function BarcodeScanner({ onResult }: { onResult: (code:string)=>void }) {
+  const [manualCode, setManualCode] = useState('')
+  const [cameraActive, setCameraActive] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream|null>(null)
+
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      streamRef.current = stream
+      if (videoRef.current) videoRef.current.srcObject = stream
+      setCameraActive(true)
+      // Dynamically load ZXing for camera scanning
+      const { BrowserMultiFormatReader } = await import('@zxing/library' as any).catch(()=>({ BrowserMultiFormatReader: null }))
+      if (BrowserMultiFormatReader && videoRef.current) {
+        const reader = new BrowserMultiFormatReader()
+        reader.decodeFromVideoElement(videoRef.current, (result: any) => {
+          if (result) { onResult(result.getText()); stopCamera() }
+        })
+      }
+    } catch(e) { console.log('Camera not available') }
+  }
+
+  function stopCamera() {
+    streamRef.current?.getTracks().forEach(t=>t.stop())
+    setCameraActive(false)
+  }
+
+  useEffect(()=>()=>{ streamRef.current?.getTracks().forEach(t=>t.stop()) }, [])
+
+  return (
+    <div style={{marginBottom:'1rem'}}>
+      {cameraActive ? (
+        <div style={{position:'relative' as const,marginBottom:'1rem'}}>
+          <video ref={videoRef} autoPlay playsInline muted
+            style={{width:'100%',borderRadius:'var(--radius-lg)',background:'#000',display:'block'}}/>
+          <div style={{position:'absolute' as const,inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none' as const}}>
+            <div style={{width:'200px',height:'80px',border:'2px solid var(--color-primary)',borderRadius:'8px',boxShadow:'0 0 0 1000px rgba(0,0,0,.4)'}}/>
+          </div>
+          <button className="btn-ghost pressable" onClick={stopCamera} style={{marginTop:'8px',width:'100%'}}>Stop camera</button>
+        </div>
+      ) : (
+        <button className="pressable" onClick={startCamera}
+          style={{width:'100%',padding:'14px',background:'var(--color-surface-2)',border:`1px dashed var(--color-border)`,borderRadius:'var(--radius-lg)',display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',cursor:'pointer',marginBottom:'1rem',fontFamily:'var(--font-body)'}}>
+          <i className="ti ti-camera" style={{fontSize:'22px',color:'var(--color-primary)'}}/>
+          <div style={{textAlign:'left' as const}}>
+            <div style={{fontSize:'13px',fontWeight:'500',color:'var(--color-text)'}}>Use camera</div>
+            <div style={{fontSize:'11px',color:'var(--color-text-muted)'}}>Point at any product barcode</div>
+          </div>
+        </button>
+      )}
+      <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.07em',marginBottom:'6px'}}>Or type barcode number</div>
+      <div style={{display:'flex',gap:'8px'}}>
+        <input value={manualCode} onChange={e=>setManualCode(e.target.value.replace(/\D/g,''))}
+          onKeyDown={e=>e.key==='Enter'&&manualCode.length>=8&&onResult(manualCode)}
+          placeholder="e.g. 5000112546805" className="input" style={{flex:1,marginBottom:0,letterSpacing:'1px'}}
+          inputMode="numeric"/>
+        <button className="btn-primary pressable" onClick={()=>manualCode.length>=8&&onResult(manualCode)} disabled={manualCode.length<8}
+          style={{padding:'10px 16px',whiteSpace:'nowrap' as const}}>
+          <i className="ti ti-search" style={{fontSize:'16px'}}/>
+        </button>
+      </div>
+    </div>
+  )
+}
 function StarRating({ value, onChange, size=18, readonly=false }: { value:number, onChange?:(r:number)=>void, size?:number, readonly?:boolean }) {
   const [hover, setHover] = useState(0)
   return (
@@ -40,8 +105,9 @@ const COACH_NAME = 'Sage'
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
 const GL: Record<string,string> = { bulk:'Bulking', cut:'Cutting', maintain:'Balanced', energy:'Energy boost', gut:'Gut health' }
 const TARGET: Record<string,number> = { bulk:2700, cut:1750, maintain:2000, energy:2000, gut:1900 }
+const GOAL_ADJ: Record<string,number> = { bulk:300, cut:-400, maintain:0, energy:0, gut:0 }
 const TABS = ['home','meals','grocery','tracker','health','assist','profile']
-const TAB_LABELS: Record<string,string> = { home:'Home', meals:'Meals', tracker:'Tracker', grocery:'Grocery', health:'Health', assist:'Coach', profile:'Profile' }
+const TAB_LABELS: Record<string,string> = { home:'Home', meals:'Meals', tracker:'Tracker', grocery:'Grocery', health:'Health', assist:'Sage', profile:'Profile' }
 const TAB_ICONS: Record<string,string> = { home:'ti-home', meals:'ti-salad', tracker:'ti-chart-bar', grocery:'ti-shopping-cart', health:'ti-droplet', assist:'ti-robot', profile:'ti-user' }
 const AVATARS = ['🥗','💪','🔥','⚡','🌿','🏃','🥑','👑','🌟','🎯']
 const DIETS = ['vegetarian','vegan','gluten-free','dairy-free','keto','halal']
@@ -282,6 +348,9 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
   // Tracker modals
   const [logModalOpen, setLogModalOpen] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const [scanResult, setScanResult] = useState<any>(null)
+  const [scanError, setScanError] = useState('')
   const [actModalOpen, setActModalOpen] = useState(false)
   const [logResult, setLogResult] = useState<any>(null)
   const [logLoading, setLogLoading] = useState(false)
@@ -310,7 +379,11 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────
 
-  const tgt = profile?.tdee || TARGET[profile?.goal] || 2000
+  // Calorie target: stored TDEE (base metabolic rate) + goal adjustment
+  const baseTdee = profile?.tdee || TARGET[profile?.goal] || 2000
+  const tgt = profile?.tdee
+    ? Math.max(1200, baseTdee + (GOAL_ADJ[profile?.goal] || 0))
+    : TARGET[profile?.goal] || 2000
   const loggedCals = foodLog.reduce((a:number,x:any)=>a+(x.calories||0),0)
   const totalIn = ((meals[activeDate]?.macros?.calories||0) + loggedCals)
   const totalBurned = activityLog.reduce((a:number,x:any)=>a+(x.burned||0),0)
@@ -444,7 +517,36 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     try { await saveGroceryItems(user.id,activeDate,[...grocery.filter((g:any)=>!items.find((i:any)=>i.name===g.name)),...items]); await loadGrocery(); switchTab('grocery') } catch(e){console.error(e)}
   }
 
-  // ─── FOOD LOG ──────────────────────────────────────────────────────────────
+  // ─── BARCODE SCANNER ──────────────────────────────────────────────────────
+  async function lookupBarcode(barcode: string) {
+    setScanError(''); setScanResult(null)
+    try {
+      const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}?fields=product_name,nutriments,serving_size,brands`)
+      const data = await res.json()
+      if (data.status !== 1) { setScanError('Product not found. Try another barcode.'); return }
+      const p = data.product
+      const n = p.nutriments || {}
+      const result = {
+        name: p.product_name || p.brands || 'Unknown product',
+        portion: p.serving_size || '100g',
+        calories: Math.round(n['energy-kcal_serving'] || n['energy-kcal_100g'] || 0),
+        protein: Math.round((n['proteins_serving'] || n['proteins_100g'] || 0) * 10) / 10,
+        carbs: Math.round((n['carbohydrates_serving'] || n['carbohydrates_100g'] || 0) * 10) / 10,
+        fat: Math.round((n['fat_serving'] || n['fat_100g'] || 0) * 10) / 10,
+      }
+      setScanResult(result)
+    } catch(e) { setScanError('Could not reach Open Food Facts. Check your connection.') }
+  }
+
+  async function addScannedFood() {
+    if (!scanResult) return
+    try {
+      await addFoodLog(user.id, { date: todayKey(), mealTime: foodMealTime, ...scanResult })
+      await loadFoodLog()
+      setScanResult(null); setScannerOpen(false); setScanError('')
+      setLogResult(scanResult)
+    } catch(e) { console.error(e) }
+  }
 
   async function logFood() {
     const name=foodNameRef.current?.value?.trim(); const portion=foodPortionRef.current?.value?.trim()
@@ -675,14 +777,22 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
     return (
       <div key={tabKey} className="anim-fade-up" style={{padding:'0 1.25rem 1rem',display:'flex',flexDirection:'column',gap:'10px'}}>
-        {/* Strip */}
-        <div className="card" style={{background:'var(--color-primary-pale)',borderColor:'var(--color-primary-border)',display:'flex',gap:'10px'}}>
-          {[{val:totalIn,label:'eaten',color:'var(--color-amber)'},{val:totalBurned,label:'burned',color:'var(--color-red)'},{val:Math.max(tgt-netCals,0),label:'remaining',color:rc}].map((item,i)=>(
-            <div key={i} style={{flex:1,textAlign:'center' as const}}>
-              <div style={{fontFamily:'var(--font-display)',fontSize:'22px',color:item.color,lineHeight:1}}>{item.val}</div>
-              <div style={{fontSize:'9px',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.06em',marginTop:'3px'}}>{item.label}</div>
-            </div>
-          ))}
+        {/* Prominent summary strip */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1px 1fr 1px 1fr',background:'var(--color-surface)',border:`0.5px solid var(--color-border)`,borderRadius:'var(--radius-lg)',overflow:'hidden'}}>
+          {[
+            {val:totalIn,   label:'Eaten',     color:'var(--color-amber)'},
+            null,
+            {val:totalBurned,label:'Burned',   color:'var(--color-red)'},
+            null,
+            {val:Math.max(tgt-netCals,0), label:'Remaining', color:rc},
+          ].map((item,i)=>
+            item===null
+              ? <div key={i} style={{background:'var(--color-border)',alignSelf:'stretch'}}/>
+              : <div key={i} style={{padding:'16px 8px',textAlign:'center' as const}}>
+                  <div style={{fontFamily:'var(--font-display)',fontSize:'28px',fontWeight:'600',color:item.color,lineHeight:1,letterSpacing:'-0.5px'}}>{item.val}</div>
+                  <div style={{fontSize:'10px',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.07em',marginTop:'4px',fontWeight:'600'}}>{item.label}</div>
+                </div>
+          )}
         </div>
 
         {/* Macro bars */}
@@ -1077,7 +1187,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             </div>
             <div className="menu-row-text">
               <div className="menu-row-title">Calorie target</div>
-              <div className="menu-row-sub">{profile?.tdee?`${profile.tdee} kcal · tap to recalculate`:'Not set — tap to calculate'}</div>
+              <div className="menu-row-sub">{profile?.tdee?`${Math.max(1200,(profile.tdee+(GOAL_ADJ[profile?.goal]||0)))} kcal · tap to recalculate`:'Not set — tap to calculate'}</div>
             </div>
             <i className="ti ti-arrow-right" style={{fontSize:'15px',color:'var(--color-text-muted)'}}/>
           </div>
@@ -1455,16 +1565,45 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         <button className="btn-ghost" onClick={()=>{ setMealModalOpen(false); setMealSuggestions([]) }} style={{marginTop:'8px'}}>Cancel</button>
       </Modal>
 
+      {/* ── BARCODE SCANNER MODAL ── */}
+      <Modal open={scannerOpen} onClose={()=>setScannerOpen(false)} title="Scan barcode" subtitle="Enter the barcode number from the product packaging.">
+        <BarcodeScanner onResult={lookupBarcode} />
+        {scanError&&(
+          <div style={{background:'var(--color-red-pale)',border:`0.5px solid var(--color-red-border)`,borderRadius:'var(--radius-md)',padding:'10px 13px',marginBottom:'1rem',fontSize:'13px',color:'var(--color-red)',display:'flex',alignItems:'center',gap:'8px'}}>
+            <i className="ti ti-alert-circle" style={{fontSize:'16px'}}/>
+            {scanError}
+          </div>
+        )}
+        {scanResult&&(
+          <div className="anim-scale-in" style={{background:'var(--color-primary-pale)',border:`0.5px solid var(--color-primary-border)`,borderRadius:'var(--radius-lg)',padding:'14px',marginBottom:'1rem'}}>
+            <div style={{fontFamily:'var(--font-display)',fontSize:'15px',fontWeight:'600',marginBottom:'4px'}}>{scanResult.name}</div>
+            <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginBottom:'10px'}}>{scanResult.portion}</div>
+            <div style={{display:'flex',gap:'8px',marginBottom:'12px'}}>
+              {[{l:'Calories',v:`${scanResult.calories} kcal`,c:'var(--color-amber)'},{l:'Protein',v:`${scanResult.protein}g`,c:'var(--color-primary)'},{l:'Carbs',v:`${scanResult.carbs}g`,c:'var(--color-blue)'},{l:'Fat',v:`${scanResult.fat}g`,c:'var(--color-amber)'}].map(m=>(
+                <div key={m.l} style={{flex:1,textAlign:'center' as const,background:'var(--color-bg)',borderRadius:'var(--radius-md)',padding:'8px 4px'}}>
+                  <div style={{fontSize:'14px',fontWeight:'600',color:m.c}}>{m.v}</div>
+                  <div style={{fontSize:'10px',color:'var(--color-text-muted)',marginTop:'2px',textTransform:'uppercase' as const}}>{m.l}</div>
+                </div>
+              ))}
+            </div>
+            <button className="btn-primary pressable" onClick={addScannedFood}>
+              <i className="ti ti-plus" style={{fontSize:'15px'}}/>Add to food log
+            </button>
+          </div>
+        )}
+        <button className="btn-ghost" onClick={()=>setScannerOpen(false)} style={{marginTop:'8px'}}>Cancel</button>
+      </Modal>
+
       {/* ── FOOD LOG MODAL ── */}
       <Modal open={logModalOpen} onClose={()=>setLogModalOpen(false)} title="Log food" subtitle="Search by name — Sage will look up the nutrition.">
         {/* Quick-log grid */}
         <div className="quick-log-grid" style={{marginBottom:'1.25rem'}}>
-          <div className="quick-log-btn pressable">
+          <div className="quick-log-btn pressable" onClick={()=>{setScanResult(null);setScanError('');setScannerOpen(true)}}>
             <div className="quick-log-icon" style={{background:'var(--color-primary-pale)'}}>
               <i className="ti ti-barcode" style={{fontSize:'18px',color:'var(--color-primary)'}}/>
             </div>
             <span className="quick-log-title">Scan barcode</span>
-            <span className="quick-log-sub">Coming soon</span>
+            <span className="quick-log-sub">Open Food Facts</span>
           </div>
           <div className="quick-log-btn pressable" onClick={()=>{setLogModalOpen(false);setTab('assist')}}>
             <div className="quick-log-icon" style={{background:'var(--color-surface-2)'}}>
