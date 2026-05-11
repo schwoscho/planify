@@ -14,6 +14,62 @@ import {
 } from '@/lib/db'
 import Dashboard from './Dashboard'
 
+// ── Photo Food Logger Component ───────────────────────────────────────────
+function PhotoFoodLogger({ onPhoto, loading }: { onPhoto:(f:File)=>void, loading:boolean }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [preview, setPreview] = useState<string|null>(null)
+
+  function handleFile(file: File|null) {
+    if (!file || !file.type.startsWith('image/')) return
+    const url = URL.createObjectURL(file)
+    setPreview(url)
+    onPhoto(file)
+  }
+
+  return (
+    <div style={{marginBottom:'1rem'}}>
+      {preview ? (
+        <div style={{marginBottom:'1rem',position:'relative' as const}}>
+          <img src={preview} alt="Food" style={{width:'100%',borderRadius:'var(--radius-lg)',maxHeight:'220px',objectFit:'cover',display:'block'}}/>
+          {!loading&&(
+            <button onClick={()=>{setPreview(null)}}
+              style={{position:'absolute' as const,top:'8px',right:'8px',background:'rgba(0,0,0,.6)',border:'none',borderRadius:'50%',width:'28px',height:'28px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <i className="ti ti-x" style={{fontSize:'14px',color:'#fff'}}/>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'1rem'}}>
+          {/* Camera capture */}
+          <button onClick={()=>{ const i=document.createElement('input'); i.type='file'; i.accept='image/*'; i.capture='environment'; i.onchange=()=>handleFile(i.files?.[0]||null); i.click() }}
+            style={{padding:'20px 12px',background:'var(--color-primary-pale)',border:`1.5px solid var(--color-primary-border)`,borderRadius:'var(--radius-lg)',display:'flex',flexDirection:'column' as const,alignItems:'center',gap:'8px',cursor:'pointer',fontFamily:'var(--font-body)'}}>
+            <div style={{width:'44px',height:'44px',borderRadius:'50%',background:'var(--color-primary)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <i className="ti ti-camera" style={{fontSize:'22px',color:'#fff'}}/>
+            </div>
+            <div style={{fontSize:'13px',fontWeight:'600',color:'var(--color-primary)'}}>Take photo</div>
+            <div style={{fontSize:'11px',color:'var(--color-primary)',opacity:.7}}>Use camera</div>
+          </button>
+          {/* Gallery upload */}
+          <button onClick={()=>fileRef.current?.click()}
+            style={{padding:'20px 12px',background:'var(--color-surface-2)',border:`1px solid var(--color-border)`,borderRadius:'var(--radius-lg)',display:'flex',flexDirection:'column' as const,alignItems:'center',gap:'8px',cursor:'pointer',fontFamily:'var(--font-body)'}}>
+            <div style={{width:'44px',height:'44px',borderRadius:'50%',background:'var(--color-surface)',border:`1px solid var(--color-border)`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <i className="ti ti-photo" style={{fontSize:'22px',color:'var(--color-text-muted)'}}/>
+            </div>
+            <div style={{fontSize:'13px',fontWeight:'600',color:'var(--color-text)'}}>Upload photo</div>
+            <div style={{fontSize:'11px',color:'var(--color-text-muted)'}}>From gallery</div>
+          </button>
+        </div>
+      )}
+      <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}}
+        onChange={e=>handleFile(e.target.files?.[0]||null)}/>
+      <div style={{fontSize:'11px',color:'var(--color-text-muted)',textAlign:'center' as const,lineHeight:'1.5'}}>
+        <i className="ti ti-sparkles" style={{fontSize:'12px',marginRight:'4px',color:'var(--color-primary)'}}/>
+        Sage analyses your photo and estimates the nutrition
+      </div>
+    </div>
+  )
+}
+
 // ── Barcode Scanner Component ─────────────────────────────────────────────
 function BarcodeScanner({ onResult }: { onResult: (code:string)=>void }) {
   const [manualCode, setManualCode] = useState('')
@@ -401,6 +457,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const [scannerOpen, setScannerOpen] = useState(false)
   const [scanResult, setScanResult] = useState<any>(null)
   const [scanError, setScanError] = useState('')
+  const [photoLogOpen, setPhotoLogOpen] = useState(false)
+  const [photoResult, setPhotoResult] = useState<any>(null)
+  const [photoLoading, setPhotoLoading] = useState(false)
+  const [photoError, setPhotoError] = useState('')
   const [actModalOpen, setActModalOpen] = useState(false)
   const [logResult, setLogResult] = useState<any>(null)
   const [logLoading, setLogLoading] = useState(false)
@@ -586,7 +646,37 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     try { await saveGroceryItems(user.id,activeDate,[...grocery.filter((g:any)=>!items.find((i:any)=>i.name===g.name)),...items]); await loadGrocery(); switchTab('grocery') } catch(e){console.error(e)}
   }
 
-  // ─── BARCODE SCANNER ──────────────────────────────────────────────────────
+  // ─── PHOTO FOOD LOG ───────────────────────────────────────────────────────
+  async function analysePhoto(file: File) {
+    setPhotoLoading(true); setPhotoError(''); setPhotoResult(null)
+    try {
+      const base64 = await new Promise<string>((res, rej) => {
+        const reader = new FileReader()
+        reader.onload = () => res((reader.result as string).split(',')[1])
+        reader.onerror = () => rej(new Error('Read failed'))
+        reader.readAsDataURL(file)
+      })
+      const response = await fetch('/api/photolog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mimeType: file.type })
+      })
+      const data = await response.json()
+      if (data.error) { setPhotoError(data.error); return }
+      setPhotoResult(data)
+    } catch(e) { setPhotoError('Failed to analyse photo. Please try again.') }
+    setPhotoLoading(false)
+  }
+
+  async function addPhotoFood() {
+    if (!photoResult) return
+    try {
+      await addFoodLog(user.id, { date: todayKey(), mealTime: foodMealTime, name: photoResult.name, portion: photoResult.portion, calories: photoResult.calories, protein: photoResult.protein, carbs: photoResult.carbs, fat: photoResult.fat })
+      await loadFoodLog()
+      setPhotoLogOpen(false); setPhotoResult(null)
+      setLogResult(photoResult)
+    } catch(e) { console.error(e) }
+  }
   async function lookupBarcode(barcode: string) {
     setScanError(''); setScanResult(null)
     try {
@@ -790,7 +880,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           <div>
             {profile?.goal&&<div style={{background:'var(--color-primary-pale)',border:`0.5px solid var(--color-primary-border)`,borderRadius:'var(--radius-md)',padding:'10px 13px',marginBottom:'12px',fontSize:'12px',color:'var(--color-primary)',display:'flex',alignItems:'center',gap:'8px'}}>
               <i className="ti ti-check" style={{fontSize:'14px'}}/>
-              Tailored to: <strong>{GL[profile.goal]}</strong>{profile.diet?.length?` · ${profile.diet[0]}`:''} · €{profile.budget}/wk{profile.tdee?` · ${profile.tdee} kcal`:''}
+              Tailored to: <strong>{GL[profile.goal]}</strong>{profile.diet?.length?` · ${profile.diet[0]}`:''} · €{profile.budget}/wk{tgt?` · ${tgt} kcal`:''}
             </div>}
 
             {/* Cuisine filter */}
@@ -1217,7 +1307,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                   <i className="ti ti-robot" style={{fontSize:'13px'}}/>{COACH_NAME}
                 </div>
                 <div style={{fontSize:'13px',lineHeight:'1.6',color:'var(--color-text)'}}>
-                  Hi! I'm {COACH_NAME}, your personal nutrition coach. Ask me anything about meals, macros, or your health goals.{profile?.tdee?` Your daily target is ${profile.tdee} kcal.`:''}
+                  Hi! I'm {COACH_NAME}, your personal nutrition coach. Ask me anything about meals, macros, or your health goals.{tgt?` Your daily target is ${tgt} kcal.`:''}
                 </div>
                 <div className="suggest-chips">
                   {CHIPS.map(([l,q])=><div key={l} className="suggest-chip" onClick={()=>sendChat(q)}>{l}</div>)}
@@ -1290,7 +1380,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           </div>
           <div style={{fontFamily:'var(--font-display)',fontSize:'24px',color:'var(--color-text)'}}>{profile?.username||displayName}</div>
           {profile?.tdee&&<div style={{marginTop:'8px',display:'inline-flex',alignItems:'center',gap:'5px',background:'var(--color-primary-pale)',color:'var(--color-primary)',padding:'5px 14px',borderRadius:'20px',fontSize:'12px',fontWeight:'500'}}>
-            <i className="ti ti-target" style={{fontSize:'12px'}}/>{profile.tdee} kcal daily target
+            <i className="ti ti-target" style={{fontSize:'12px'}}/>{tgt} kcal daily target
           </div>}
         </div>
 
@@ -1696,6 +1786,57 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         <button className="btn-ghost" onClick={()=>{ setMealModalOpen(false); setMealSuggestions([]) }} style={{marginTop:'8px'}}>Cancel</button>
       </Modal>
 
+      {/* ── PHOTO LOG MODAL ── */}
+      <Modal open={photoLogOpen} onClose={()=>setPhotoLogOpen(false)} title="Log food by photo" subtitle="Take a photo or upload one — Sage will identify it and estimate macros.">
+        <PhotoFoodLogger onPhoto={analysePhoto} loading={photoLoading}/>
+        {photoLoading&&(
+          <div style={{textAlign:'center' as const,padding:'1.5rem 0',color:'var(--color-text-muted)'}}>
+            <i className="ti ti-loader-2 ti-spin" style={{fontSize:'32px',color:'var(--color-primary)',display:'block',marginBottom:'10px'}}/>
+            <div style={{fontSize:'14px',fontWeight:'500'}}>Analysing your food...</div>
+            <div style={{fontSize:'12px',marginTop:'4px'}}>Sage is identifying the ingredients</div>
+          </div>
+        )}
+        {photoError&&(
+          <div style={{background:'var(--color-red-pale)',border:`0.5px solid var(--color-red-border)`,borderRadius:'var(--radius-md)',padding:'12px',marginBottom:'1rem',fontSize:'13px',color:'var(--color-red)',display:'flex',gap:'8px',alignItems:'flex-start'}}>
+            <i className="ti ti-alert-circle" style={{fontSize:'16px',flexShrink:0,marginTop:'1px'}}/>
+            <div>{photoError}<br/><span style={{fontSize:'12px',opacity:.8}}>Try a clearer photo, better lighting, or use the text search instead.</span></div>
+          </div>
+        )}
+        {photoResult&&!photoLoading&&(
+          <div className="anim-scale-in" style={{background:'var(--color-primary-pale)',border:`0.5px solid var(--color-primary-border)`,borderRadius:'var(--radius-lg)',padding:'16px',marginBottom:'1rem'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'10px'}}>
+              <div>
+                <div style={{fontFamily:'var(--font-display)',fontSize:'16px',fontWeight:'600',color:'var(--color-text)'}}>{photoResult.name}</div>
+                <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'2px'}}>{photoResult.portion}</div>
+              </div>
+              <div style={{fontSize:'10px',padding:'3px 8px',borderRadius:'20px',fontWeight:'600',
+                background:photoResult.confidence==='high'?'var(--color-primary-pale)':photoResult.confidence==='medium'?'var(--color-amber-pale)':'var(--color-red-pale)',
+                color:photoResult.confidence==='high'?'var(--color-primary)':photoResult.confidence==='medium'?'var(--color-amber)':'var(--color-red)'}}>
+                {photoResult.confidence} confidence
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'6px',marginBottom:'10px'}}>
+              {[{l:'Calories',v:`${photoResult.calories}`,u:'kcal',c:'var(--color-amber)'},{l:'Protein',v:`${photoResult.protein}`,u:'g',c:'var(--color-primary)'},{l:'Carbs',v:`${photoResult.carbs}`,u:'g',c:'var(--color-blue)'},{l:'Fat',v:`${photoResult.fat}`,u:'g',c:'var(--color-amber)'}].map(m=>(
+                <div key={m.l} style={{background:'var(--color-surface)',borderRadius:'var(--radius-md)',padding:'8px 4px',textAlign:'center' as const}}>
+                  <div style={{fontSize:'15px',fontWeight:'700',color:m.c,lineHeight:1}}>{m.v}<span style={{fontSize:'10px',fontWeight:'400',color:'var(--color-text-muted)'}}>{m.u}</span></div>
+                  <div style={{fontSize:'9px',color:'var(--color-text-muted)',marginTop:'3px',textTransform:'uppercase' as const}}>{m.l}</div>
+                </div>
+              ))}
+            </div>
+            {photoResult.notes&&(
+              <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginBottom:'10px',fontStyle:'italic'}}>{photoResult.notes}</div>
+            )}
+            <button className="btn-primary pressable" onClick={addPhotoFood}>
+              <i className="ti ti-plus" style={{fontSize:'15px'}}/>Add to food log
+            </button>
+            <div style={{marginTop:'10px',fontSize:'12px',color:'var(--color-text-muted)',textAlign:'center' as const}}>
+              AI estimates may not be exact — adjust portions in the food log if needed.
+            </div>
+          </div>
+        )}
+        <button className="btn-ghost" onClick={()=>setPhotoLogOpen(false)} style={{marginTop:'8px'}}>Cancel</button>
+      </Modal>
+
       {/* ── BARCODE SCANNER MODAL ── */}
       <Modal open={scannerOpen} onClose={()=>setScannerOpen(false)} title="Scan barcode" subtitle="Enter the barcode number from the product packaging.">
         <BarcodeScanner onResult={lookupBarcode} />
@@ -1775,20 +1916,34 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       {/* ── FOOD LOG MODAL ── */}
       <Modal open={logModalOpen} onClose={()=>setLogModalOpen(false)} title="Log food" subtitle="Search by name — Sage will look up the nutrition.">
         {/* Quick-log grid */}
-        <div className="quick-log-grid" style={{marginBottom:'1.25rem'}}>
+        <div className="quick-log-grid" style={{marginBottom:'1.25rem',gridTemplateColumns:'1fr 1fr 1fr 1fr'}}>
           <div className="quick-log-btn pressable" onClick={()=>{setScanResult(null);setScanError('');setScannerOpen(true)}}>
             <div className="quick-log-icon" style={{background:'var(--color-primary-pale)'}}>
               <i className="ti ti-barcode" style={{fontSize:'18px',color:'var(--color-primary)'}}/>
             </div>
-            <span className="quick-log-title">Scan barcode</span>
-            <span className="quick-log-sub">Open Food Facts</span>
+            <span className="quick-log-title">Scan</span>
+            <span className="quick-log-sub">Barcode</span>
           </div>
-          <div className="quick-log-btn pressable" onClick={()=>{setLogModalOpen(false);setTab('assist')}}>
+          <div className="quick-log-btn pressable" onClick={()=>{setPhotoResult(null);setPhotoError('');setPhotoLogOpen(true);setLogModalOpen(false)}}>
+            <div className="quick-log-icon" style={{background:'#1a2a3a'}}>
+              <i className="ti ti-camera" style={{fontSize:'18px',color:'#3b82f6'}}/>
+            </div>
+            <span className="quick-log-title">Photo</span>
+            <span className="quick-log-sub">Snap food</span>
+          </div>
+          <div className="quick-log-btn pressable" onClick={()=>{setLogModalOpen(false);switchTab('assist')}}>
             <div className="quick-log-icon" style={{background:'var(--color-surface-2)'}}>
               <i className="ti ti-robot" style={{fontSize:'18px',color:'var(--color-text-muted)'}}/>
             </div>
-            <span className="quick-log-title">Ask {COACH_NAME}</span>
-            <span className="quick-log-sub">Estimate calories</span>
+            <span className="quick-log-title">Ask Sage</span>
+            <span className="quick-log-sub">Estimate</span>
+          </div>
+          <div className="quick-log-btn pressable" onClick={()=>{ const el=document.querySelector('.food-name-input') as HTMLInputElement; el?.focus() }}>
+            <div className="quick-log-icon" style={{background:'var(--color-surface-2)'}}>
+              <i className="ti ti-search" style={{fontSize:'18px',color:'var(--color-text-muted)'}}/>
+            </div>
+            <span className="quick-log-title">Search</span>
+            <span className="quick-log-sub">By name</span>
           </div>
         </div>
 
@@ -1801,7 +1956,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             </div>
           ))}
         </div>
-        <input ref={foodNameRef} placeholder="Food name (e.g. banana, oatmeal)" className="input"/>
+        <input ref={foodNameRef} placeholder="Food name (e.g. banana, oatmeal)" className="input food-name-input"/>
         <input ref={foodPortionRef} placeholder="Portion (e.g. 1 cup, 100g)" className="input"/>
         {logResult&&(
           <div className="anim-scale-in" style={{background:'var(--color-primary-pale)',border:`0.5px solid var(--color-primary-border)`,borderRadius:'var(--radius-md)',padding:'10px 13px',marginBottom:'.75rem',fontSize:'13px',color:'var(--color-primary)',display:'flex',alignItems:'center',gap:'8px'}}>
