@@ -14,6 +14,26 @@ import {
 } from '@/lib/db'
 import Dashboard from './Dashboard'
 
+// ── Star Rating Component ──────────────────────────────────────────────────
+function StarRating({ value, onChange, size=18, readonly=false }: { value:number, onChange?:(r:number)=>void, size?:number, readonly?:boolean }) {
+  const [hover, setHover] = useState(0)
+  return (
+    <div style={{display:'flex',gap:'2px',alignItems:'center'}}>
+      {[1,2,3,4,5].map(i=>(
+        <span key={i}
+          onClick={()=>!readonly && onChange?.(i)}
+          onMouseEnter={()=>!readonly && setHover(i)}
+          onMouseLeave={()=>!readonly && setHover(0)}
+          style={{fontSize:`${size}px`,cursor:readonly?'default':'pointer',lineHeight:1,
+            color: i<=(hover||value) ? '#f59e0b' : 'var(--border)',
+            transition:'color .1s'}}>
+          ★
+        </span>
+      ))}
+    </div>
+  )
+}
+
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
 const COACH_NAME = 'Sage'
@@ -246,6 +266,9 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const [weightLog, setWeightLog] = useState<any[]>([])
   const [activityLog, setActivityLog] = useState<any[]>([])
   const [savedRecipes, setSavedRecipes] = useState<any[]>([])
+  const [mealRatings, setMealRatings] = useState<Record<string,{avg:number,count:number}>>({}) // community ratings
+  const [myRatings, setMyRatings] = useState<Record<string,number>>({}) // user's own ratings
+  const [ratingTarget, setRatingTarget] = useState<string|null>(null) // meal being rated
 
   // Meal suggestions
   const [mealModalOpen, setMealModalOpen] = useState(false)
@@ -338,6 +361,8 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       const map: Record<string,any> = {}
       data.forEach((m:any)=>{ map[m.plan_date||m.logged_date||dateKey(new Date())]={...m,desc:m.description} })
       setMeals(map)
+      const names = data.map((m:any)=>m.name).filter(Boolean)
+      if (names.length) loadMealRatings(names)
     } catch(e){console.error(e)}
   }
   async function loadGrocery() { try { setGrocery(await getGroceryItems(user.id,activeDate)||[]) } catch(e){console.error(e)} }
@@ -354,6 +379,27 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   async function loadActivity() { try { setActivityLog(await getActivityLog(user.id,todayKey())||[]) } catch(e){console.error(e)} }
   async function loadSavedRecipes() { try { setSavedRecipes(await getSavedRecipes(user.id)||[]) } catch(e){console.error(e)} }
 
+  async function loadMealRatings(names: string[]) {
+    if (!names.length) return
+    try {
+      const { supabase } = await import('@/lib/supabase')
+      const { data } = await supabase.from('meal_rating_averages').select('*').in('meal_name', names)
+      const map: Record<string,{avg:number,count:number}> = {}
+      data?.forEach((r:any) => { map[r.meal_name] = { avg: parseFloat(r.avg_rating), count: parseInt(r.rating_count) } })
+      setMealRatings(m => ({...m, ...map}))
+    } catch(e) { console.error(e) }
+  }
+
+  async function submitRating(mealName: string, rating: number) {
+    try {
+      const { supabase } = await import('@/lib/supabase')
+      await supabase.from('meal_ratings').upsert({ user_id: user.id, meal_name: mealName, rating }, { onConflict: 'user_id,meal_name' })
+      setMyRatings(r => ({...r, [mealName]: rating}))
+      setRatingTarget(null)
+      await loadMealRatings([mealName])
+    } catch(e) { console.error(e) }
+  }
+
   // ─── MEAL ACTIONS ──────────────────────────────────────────────────────────
 
   async function selectMeal(meal:any) {
@@ -364,6 +410,8 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         await saveMeal(user.id,dk,0,{...meal,servings,plan_date:dk})
       }
       await loadMeals(); setMealModalOpen(false); setMealSuggestions([])
+      // Show rating prompt after a moment
+      setTimeout(()=>setRatingTarget(meal.name), 500)
     } catch(e){console.error(e)}
   }
 
@@ -376,6 +424,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       const res=await fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({profile,filters:{diet:profile.diet,allergies:profile.allergies,goal:profile.goal,budget:profile.budget,time:draftFilters.time,difficulty:draftFilters.diff,cuisine:draftFilters.cuisine},avoid:draftAvoid,servings,mealDays})})
       const data=await res.json(); setMealSuggestions(data.meals||[])
+      if (data.meals?.length) loadMealRatings(data.meals.map((m:any)=>m.name))
     } catch(e){console.error(e)}
     setSuggestLoading(false)
   }
@@ -1376,6 +1425,13 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             <div className="recipe-card-body">
               <div className="recipe-card-name">{meal.name}</div>
               <div className="recipe-card-desc">{meal.desc}</div>
+              {/* Community rating */}
+              {mealRatings[meal.name]&&(
+                <div style={{display:'flex',alignItems:'center',gap:'5px',marginBottom:'6px'}}>
+                  <StarRating value={Math.round(mealRatings[meal.name].avg)} size={13} readonly/>
+                  <span style={{fontSize:'11px',color:'var(--text-2)'}}>{mealRatings[meal.name].avg} ({mealRatings[meal.name].count})</span>
+                </div>
+              )}
               <div style={{display:'flex',gap:'5px',marginBottom:'9px',flexWrap:'wrap' as const}}>
                 {meal.timeTag&&<span className="tag tag-slate"><i className="ti ti-clock" style={{fontSize:'10px',marginRight:'3px'}}/>{meal.timeTag}</span>}
                 {meal.diffTag&&<span className="tag tag-slate">{meal.diffTag}</span>}
@@ -1567,6 +1623,31 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       </Modal>
 
       {/* Saved toast */}
+      {/* ── MEAL RATING MODAL ── */}
+      {ratingTarget&&(
+        <div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,.6)',zIndex:200,display:'flex',alignItems:'flex-end',justifyContent:'center'}} onClick={()=>setRatingTarget(null)}>
+          <div className="anim-slide-up" onClick={e=>e.stopPropagation()}
+            style={{background:'var(--surface)',borderRadius:'var(--radius-2xl) var(--radius-2xl) 0 0',padding:'1.5rem 1.5rem 2.5rem',width:'100%',maxWidth:'420px',textAlign:'center' as const}}>
+            <div style={{width:'36px',height:'4px',borderRadius:'2px',background:'var(--border)',margin:'0 auto 1.25rem'}}/>
+            <div style={{fontSize:'16px',fontWeight:'600',color:'var(--text)',marginBottom:'6px'}}>How was this meal?</div>
+            <div style={{fontSize:'13px',color:'var(--text-2)',marginBottom:'1.25rem'}}>{ratingTarget}</div>
+            <div style={{display:'flex',justifyContent:'center',marginBottom:'1.25rem'}}>
+              <StarRating value={myRatings[ratingTarget]||0} size={36}
+                onChange={r=>submitRating(ratingTarget,r)}/>
+            </div>
+            {mealRatings[ratingTarget]&&(
+              <div style={{fontSize:'12px',color:'var(--text-2)',marginBottom:'1rem'}}>
+                Community: {mealRatings[ratingTarget].avg}★ from {mealRatings[ratingTarget].count} {mealRatings[ratingTarget].count===1?'rating':'ratings'}
+              </div>
+            )}
+            <button onClick={()=>setRatingTarget(null)}
+              style={{fontSize:'13px',color:'var(--text-2)',background:'none',border:'none',cursor:'pointer',fontFamily:'var(--font-body)'}}>
+              Skip
+            </button>
+          </div>
+        </div>
+      )}
+
       {savedToast&&(
         <div style={{position:'fixed' as const,top:'20px',left:'50%',transform:'translateX(-50%)',background:'var(--color-primary)',color:'#fff',padding:'10px 20px',borderRadius:'50px',fontSize:'13px',fontWeight:'500',zIndex:999,whiteSpace:'nowrap' as const,boxShadow:'0 4px 16px rgba(0,0,0,.15)',display:'flex',alignItems:'center',gap:'7px'}}>
           <i className="ti ti-heart-filled" style={{fontSize:'15px'}}/>Recipe saved!
