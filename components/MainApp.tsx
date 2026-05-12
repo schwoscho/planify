@@ -172,6 +172,25 @@ function BarcodeScanner({ onResult }: { onResult: (code:string)=>void }) {
     </div>
   )
 }
+// ── Meal Image Component — uses Unsplash Source (free, no API key) ─────────
+function MealImage({ name, emoji, size=80 }: { name:string, emoji?:string, size?:number }) {
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState(false)
+  // Unsplash Source: free, no key, just search by keyword
+  const query = encodeURIComponent(name.split(' ').slice(0,3).join(' '))
+  const url = `https://source.unsplash.com/${size}x${size}/?food,${query}`
+  return (
+    <div style={{width:`${size}px`,height:`${size}px`,borderRadius:'var(--radius-md)',overflow:'hidden',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,position:'relative' as const}}>
+      {!error && (
+        <img src={url} alt={name} loading="lazy"
+          onLoad={()=>setLoaded(true)} onError={()=>setError(true)}
+          style={{width:'100%',height:'100%',objectFit:'cover',display:loaded?'block':'none'}}/>
+      )}
+      {(!loaded||error) && <span style={{fontSize:`${Math.round(size*0.45)}px`}}>{emoji||'🍽️'}</span>}
+    </div>
+  )
+}
+
 function StarRating({ value, onChange, size=18, readonly=false }: { value:number, onChange?:(r:number)=>void, size?:number, readonly?:boolean }) {
   const [hover, setHover] = useState(0)
   return (
@@ -201,6 +220,12 @@ const GOAL_ADJ: Record<string,number> = { bulk:300, cut:-400, maintain:0, energy
 const TABS = ['home','meals','grocery','tracker','health','assist','profile']
 const TAB_LABELS: Record<string,string> = { home:'Home', meals:'Meals', tracker:'Tracker', grocery:'Grocery', health:'Health', assist:'Sage', profile:'Profile' }
 const TAB_ICONS: Record<string,string> = { home:'ti-home', meals:'ti-salad', tracker:'ti-chart-bar', grocery:'ti-shopping-cart', health:'ti-droplet', assist:'ti-robot', profile:'ti-user' }
+
+const MEAL_SLOTS = [
+  { id:'breakfast', label:'Breakfast', icon:'ti-sun',      emoji:'🌅' },
+  { id:'lunch',     label:'Lunch',     icon:'ti-sun-high', emoji:'☀️' },
+  { id:'dinner',    label:'Dinner',    icon:'ti-moon',     emoji:'🌙' },
+]
 
 const COUNTRIES: Record<string,{name:string,flag:string,currency:string,stores:{id:string,name:string,color:string}[]}> = {
   HU:{name:'Hungary',flag:'🇭🇺',currency:'Ft',stores:[{id:'tesco',name:'Tesco',color:'#003DA5'},{id:'lidl',name:'Lidl',color:'#0050AA'},{id:'aldi',name:'Aldi',color:'#00539F'},{id:'spar',name:'Spar',color:'#00843D'},{id:'penny',name:'Penny',color:'#E3000F'},{id:'cba',name:'CBA',color:'#E87722'}]},
@@ -418,6 +443,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const [profileSubPage, setProfileSubPage] = useState<string|null>(null)
   const [calViewOffset, setCalViewOffset] = useState(0)
   const [storeModalOpen, setStoreModalOpen] = useState(false)
+  const [activeMealSlot, setActiveMealSlot] = useState<'breakfast'|'lunch'|'dinner'>('lunch')
   const [userCountry, setUserCountry] = useState<string>(profile?.country||'HU')
   const [userStores, setUserStores] = useState<string[]>(profile?.preferred_stores||[])
   const [groceryOptimized, setGroceryOptimized] = useState<Record<string,{store:string,price:string}>>({})
@@ -562,7 +588,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     try {
       const data = await getMeals(user.id, todayKey())
       const map: Record<string,any> = {}
-      data.forEach((m:any)=>{ map[m.plan_date||m.logged_date||dateKey(new Date())]={...m,desc:m.description} })
+      data.forEach((m:any)=>{
+        const key = m.slot_key || (m.plan_date ? `${m.plan_date}_${m.meal_slot||'lunch'}` : dateKey(new Date()))
+        map[key] = {...m, desc:m.description}
+      })
       setMeals(map)
       const names = data.map((m:any)=>m.name).filter(Boolean)
       if (names.length) loadMealRatings(names)
@@ -626,11 +655,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       for (let d=0; d<mealDays; d++) {
         const td=new Date(activeDate+'T12:00:00'); td.setDate(td.getDate()+d)
         const dk=dateKey(td)
-        await saveMeal(user.id,dk,0,{...meal,servings,plan_date:dk})
+        const slotKey=`${dk}_${activeMealSlot}`
+        await saveMeal(user.id,dk,0,{...meal,servings,plan_date:dk,meal_slot:activeMealSlot,slot_key:slotKey})
       }
       await loadMeals(); setMealModalOpen(false); setMealSuggestions([])
-      // Show rating prompt after a moment
-      setTimeout(()=>setRatingTarget(meal.name), 500)
     } catch(e){console.error(e)}
   }
 
@@ -958,46 +986,75 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
               })}
             </div>
 
-            {/* Day's current meal */}
-            <span className="sl">{activeDateLabel()}'s meal</span>
-            {meals[activeDate] ? (
-              <div className="recipe-card anim-scale-in" style={{marginBottom:'12px'}}>
-                <div className="recipe-card-body">
-                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:'3px'}}>
-                    <div className="recipe-card-name">{meals[activeDate].name}</div>
-                    <span className="tag tag-green">Planned</span>
+            {/* 3 meal slots per day */}
+            <span className="sl">{activeDateLabel()}'s meals</span>
+            {/* Slot tabs */}
+            <div style={{display:'flex',gap:'6px',marginBottom:'12px'}}>
+              {MEAL_SLOTS.map(slot=>(
+                <div key={slot.id} className={`chip pressable ${activeMealSlot===slot.id?'active-green':''}`}
+                  onClick={()=>setActiveMealSlot(slot.id as any)}>
+                  {slot.emoji} {slot.label}
+                  {meals[`${activeDate}_${slot.id}`]&&<span style={{marginLeft:'4px',width:'6px',height:'6px',borderRadius:'50%',background:'var(--color-primary)',display:'inline-block',verticalAlign:'middle'}}/>}
+                </div>
+              ))}
+            </div>
+            {/* Active slot meal */}
+            {(()=>{
+              const slotKey=`${activeDate}_${activeMealSlot}`
+              const slotMeal=meals[slotKey]
+              return slotMeal ? (
+                <div className="recipe-card anim-scale-in" style={{marginBottom:'12px',position:'relative' as const}}>
+                  <div className="recipe-card-img" style={{padding:0,height:'100px',overflow:'hidden'}}>
+                    <MealImage name={slotMeal.name} emoji={slotMeal.emoji} size={400}/>
+                    <span style={{position:'absolute' as const,top:'8px',left:'10px',background:'rgba(0,0,0,.5)',borderRadius:'20px',padding:'3px 9px',fontSize:'10px',fontWeight:'600',color:'#fff'}}>
+                      {MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.emoji} {MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.label}
+                    </span>
+                    <span className="tag tag-green" style={{position:'absolute' as const,top:'8px',right:'8px'}}>Planned</span>
                   </div>
-                  <div className="recipe-card-desc">{meals[activeDate].description}</div>
-                  {meals[activeDate].macros&&<div className="macro-pill-row">
-                    {[{v:meals[activeDate].macros.calories,l:'kcal',c:'var(--color-text)'},{v:meals[activeDate].macros.protein+'g',l:'protein',c:'var(--color-primary)'},{v:meals[activeDate].macros.carbs+'g',l:'carbs',c:'var(--color-blue)'},{v:meals[activeDate].macros.fat+'g',l:'fat',c:'var(--color-amber)'}].map(m=>(
-                      <div key={m.l} className="macro-pill"><span className="macro-pill-val" style={{color:m.c}}>{m.v}</span><span className="macro-pill-lbl">{m.l}</span></div>
-                    ))}
-                  </div>}
-                  <div style={{display:'flex',gap:'8px'}}>
-                    <button className="pressable" onClick={()=>{setDraftFilters({...mealFilters});setDraftAvoid(avoidInput);setMealModalOpen(true);setMealSuggestions([])}}
-                      style={{flex:1,padding:'9px',borderRadius:'var(--radius-md)',border:`0.5px solid var(--color-border)`,background:'var(--color-surface)',fontSize:'12px',fontWeight:'500',color:'var(--color-text-muted)',cursor:'pointer',fontFamily:'var(--font-body)'}}>
-                      <i className="ti ti-refresh" style={{fontSize:'12px',marginRight:'4px'}}/>Change
-                    </button>
-                    <button className="pressable" onClick={()=>addToGrocery(activeDate)}
-                      style={{flex:1,padding:'9px',borderRadius:'var(--radius-md)',border:'none',background:'var(--color-primary)',fontSize:'12px',fontWeight:'500',color:'#fff',cursor:'pointer',fontFamily:'var(--font-body)'}}>
-                      <i className="ti ti-shopping-cart" style={{fontSize:'12px',marginRight:'4px'}}/>Grocery
-                    </button>
+                  <div className="recipe-card-body">
+                    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'8px',marginBottom:'4px'}}>
+                      <div className="recipe-card-name" style={{flex:1}}>{slotMeal.name}</div>
+                      {/* Inline rating on planned meal */}
+                      <StarRating value={myRatings[slotMeal.name]||0} size={14} onChange={r=>submitRating(slotMeal.name,r)}/>
+                    </div>
+                    {mealRatings[slotMeal.name]&&<div style={{fontSize:'11px',color:'var(--color-text-muted)',marginBottom:'6px'}}>
+                      Community: {mealRatings[slotMeal.name].avg}★ ({mealRatings[slotMeal.name].count})
+                    </div>}
+                    {slotMeal.macros&&<div className="macro-pill-row">
+                      {[{v:slotMeal.macros.calories,l:'kcal',c:'var(--color-text)'},{v:slotMeal.macros.protein+'g',l:'protein',c:'var(--color-primary)'},{v:slotMeal.macros.carbs+'g',l:'carbs',c:'var(--color-blue)'},{v:slotMeal.macros.fat+'g',l:'fat',c:'var(--color-amber)'}].map(m=>(
+                        <div key={m.l} className="macro-pill"><span className="macro-pill-val" style={{color:m.c}}>{m.v}</span><span className="macro-pill-lbl">{m.l}</span></div>
+                      ))}
+                    </div>}
+                    <div style={{display:'flex',gap:'8px',marginTop:'10px'}}>
+                      <button className="pressable" onClick={()=>{setDraftFilters({...mealFilters});setDraftAvoid(avoidInput);setMealModalOpen(true);setMealSuggestions([])}}
+                        style={{flex:1,padding:'9px',borderRadius:'var(--radius-md)',border:`0.5px solid var(--color-border)`,background:'var(--color-surface)',fontSize:'12px',fontWeight:'500',color:'var(--color-text-muted)',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',justifyContent:'center',gap:'4px'}}>
+                        <i className="ti ti-refresh" style={{fontSize:'12px'}}/>Change
+                      </button>
+                      <button className="pressable" onClick={()=>handleSaveRecipe(slotMeal)}
+                        style={{padding:'9px 12px',borderRadius:'var(--radius-md)',border:`0.5px solid var(--color-border)`,background:'var(--color-surface)',fontSize:'12px',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',gap:'4px'}}>
+                        <i className="ti ti-heart" style={{fontSize:'12px',color:'var(--color-red)'}}/>Save
+                      </button>
+                      <button className="pressable" onClick={()=>addToGrocery(slotKey)}
+                        style={{flex:1,padding:'9px',borderRadius:'var(--radius-md)',border:'none',background:'var(--color-primary)',fontSize:'12px',fontWeight:'500',color:'#fff',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',justifyContent:'center',gap:'4px'}}>
+                        <i className="ti ti-shopping-cart" style={{fontSize:'12px'}}/>Grocery
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="pressable" onClick={()=>{setDraftFilters({...mealFilters});setDraftAvoid(avoidInput);setMealModalOpen(true);setMealSuggestions([])}}
-                style={{borderRadius:'var(--radius-xl)',padding:'1.25rem',marginBottom:'12px',border:`1.5px dashed var(--color-border)`,display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
-                <div style={{width:'32px',height:'32px',borderRadius:'50%',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                  <i className="ti ti-sparkles" style={{fontSize:'16px',color:'var(--color-primary)'}}/>
+              ) : (
+                <div className="pressable" onClick={()=>{setDraftFilters({...mealFilters});setDraftAvoid(avoidInput);setMealModalOpen(true);setMealSuggestions([])}}
+                  style={{borderRadius:'var(--radius-xl)',padding:'1.25rem',marginBottom:'12px',border:`1.5px dashed var(--color-border)`,display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
+                  <div style={{width:'32px',height:'32px',borderRadius:'50%',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <span style={{fontSize:'18px'}}>{MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.emoji}</span>
+                  </div>
+                  <div>
+                    <div style={{fontSize:'13px',fontWeight:'500',color:'var(--color-text)'}}>Plan {MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.label} for {activeDateLabel()}</div>
+                    <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginTop:'1px'}}>AI-powered · based on your goals</div>
+                  </div>
+                  <i className="ti ti-arrow-right" style={{fontSize:'14px',color:'var(--color-text-muted)',marginLeft:'auto'}}/>
                 </div>
-                <div>
-                  <div style={{fontSize:'13px',fontWeight:'500',color:'var(--color-text)'}}>Suggest a meal for {activeDateLabel()}</div>
-                  <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginTop:'1px'}}>AI-powered · based on your goals</div>
-                </div>
-                <i className="ti ti-arrow-right" style={{fontSize:'14px',color:'var(--color-text-muted)',marginLeft:'auto'}}/>
-              </div>
-            )}
+              )
+            })()}
           </div>
         )}
       </div>
@@ -1873,26 +1930,36 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         {/* Suggestions */}
         {mealSuggestions.map((meal:any,i:number)=>(
           <div key={i} className="recipe-card anim-scale-in" style={{marginBottom:'10px',position:'relative' as const}}>
-            <div className="recipe-card-img" style={{background:'var(--primary-pale)'}}>
-              <span style={{fontSize:'38px'}}>{meal.emoji||'🍽️'}</span>
-              {meal.cuisine&&<span style={{position:'absolute' as const,top:'8px',left:'10px',background:'rgba(0,0,0,.35)',borderRadius:'20px',padding:'3px 9px',fontSize:'10px',fontWeight:'500',color:'#fff'}}>
+            {/* Image header using Unsplash */}
+            <div className="recipe-card-img" style={{background:'var(--primary-pale)',overflow:'hidden',padding:0,height:'120px'}}>
+              <MealImage name={meal.name} emoji={meal.emoji} size={400}/>
+              {meal.cuisine&&<span style={{position:'absolute' as const,top:'8px',left:'10px',background:'rgba(0,0,0,.5)',borderRadius:'20px',padding:'3px 9px',fontSize:'10px',fontWeight:'500',color:'#fff'}}>
                 {CUISINES.find(c=>c.value===meal.cuisine)?.flag} {meal.cuisine}
               </span>}
+              {/* Favourite button */}
               <button className="pressable" onClick={async(e)=>{e.stopPropagation();await handleSaveRecipe(meal)}}
-                style={{position:'absolute' as const,top:'8px',right:'10px',background:'rgba(0,0,0,.35)',border:'none',borderRadius:'50%',width:'28px',height:'28px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                <i className="ti ti-heart" style={{fontSize:'14px',color:'#fff'}}/>
+                style={{position:'absolute' as const,top:'8px',right:'10px',background:'rgba(0,0,0,.45)',border:'none',borderRadius:'50%',width:'30px',height:'30px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <i className="ti ti-heart" style={{fontSize:'15px',color:'#fff'}}/>
               </button>
             </div>
             <div className="recipe-card-body">
               <div className="recipe-card-name">{meal.name}</div>
               <div className="recipe-card-desc">{meal.desc}</div>
-              {/* Community rating */}
-              {mealRatings[meal.name]&&(
-                <div style={{display:'flex',alignItems:'center',gap:'5px',marginBottom:'6px'}}>
-                  <StarRating value={Math.round(mealRatings[meal.name].avg)} size={13} readonly/>
-                  <span style={{fontSize:'11px',color:'var(--text-2)'}}>{mealRatings[meal.name].avg} ({mealRatings[meal.name].count})</span>
+              {/* Community rating + user's own rating */}
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
+                {mealRatings[meal.name]
+                  ? <div style={{display:'flex',alignItems:'center',gap:'5px'}}>
+                      <StarRating value={Math.round(mealRatings[meal.name].avg)} size={13} readonly/>
+                      <span style={{fontSize:'11px',color:'var(--color-text-muted)'}}>{mealRatings[meal.name].avg} ({mealRatings[meal.name].count})</span>
+                    </div>
+                  : <div style={{fontSize:'11px',color:'var(--color-text-muted)'}}>No ratings yet</div>
+                }
+                {/* Inline rating — user rates directly on card */}
+                <div style={{display:'flex',alignItems:'center',gap:'5px'}}>
+                  <span style={{fontSize:'10px',color:'var(--color-text-muted)'}}>Rate:</span>
+                  <StarRating value={myRatings[meal.name]||0} size={14} onChange={r=>submitRating(meal.name,r)}/>
                 </div>
-              )}
+              </div>
               <div style={{display:'flex',gap:'5px',marginBottom:'9px',flexWrap:'wrap' as const}}>
                 {meal.timeTag&&<span className="tag tag-slate"><i className="ti ti-clock" style={{fontSize:'10px',marginRight:'3px'}}/>{meal.timeTag}</span>}
                 {meal.diffTag&&<span className="tag tag-slate">{meal.diffTag}</span>}

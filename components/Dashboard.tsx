@@ -140,27 +140,47 @@ export default function Dashboard(p: Props) {
         })}
       </div>
 
-      {/* Sage insight card */}
+      {/* Sage insight — dismissible popup, not always visible */}
       {(()=>{
         const remainingProtein=Math.max(macroProtein-logP,0)
         const calPct=tgt>0?Math.round((net/tgt)*100):0
-        let insight=''
-        if(net===0) insight=`Log your first meal to get started. Your target is ${tgt} kcal today.`
-        else if(remainingProtein>20) insight=`You're ${remainingProtein}g short on protein today. Try chicken, eggs, or Greek yogurt.`
-        else if(calPct>110) insight=`You're over your calorie target. Consider a lighter dinner or some extra activity.`
-        else if(calPct>=85) insight=`Almost at your target — ${Math.max(tgt-net,0)} kcal left. Great work today!`
-        else if(p.waterToday<p.waterGoal*0.5) insight=`Don't forget to hydrate — you're at ${Math.round((p.waterToday/p.waterGoal)*100)}% of your water goal.`
-        else if(p.waterStreak>=3) insight=`${p.waterStreak}-day water streak! You're building a great habit.`
-        else insight=`${Math.max(tgt-net,0)} kcal remaining. You're on track today.`
+        const today=new Date().toDateString()
+        const dismissedKey=`sage-dismissed-${today}`
+
+        // Pick the most relevant insight
+        const insights=[
+          net===0 && `Your daily target is ${tgt} kcal. Log your first meal to get started!`,
+          remainingProtein>40 && `You're ${remainingProtein}g short on protein. Add eggs, chicken, or Greek yogurt to hit your goal.`,
+          calPct>110 && `You're ${calPct-100}% over your calorie target today. A lighter dinner or a walk would help.`,
+          calPct>=85 && calPct<=100 && `Almost there — just ${Math.max(tgt-net,0)} kcal left. You're on track today!`,
+          p.waterToday<p.waterGoal*0.4 && `Hydration check — you're only at ${Math.round((p.waterToday/p.waterGoal)*100)}% of your water goal.`,
+          p.waterStreak>=7 && `${p.waterStreak}-day water streak! Consistency is the key to results.`,
+          p.waterStreak>=3 && p.waterStreak<7 && `${p.waterStreak}-day streak going strong. Keep it up!`,
+          Object.values(p.meals).filter(Boolean).length===0 && `No meals planned this week yet. Head to the Meals tab to get AI suggestions tailored to your ${p.profile?.goal||'goal'}.`,
+          p.activityLog.length===0 && net>0 && `You haven't logged any activity today. Even a 20-min walk burns around 100 kcal.`,
+          calPct>0 && calPct<50 && `You've only consumed ${calPct}% of your daily target. Make sure you're eating enough.`,
+          `You have ${Math.max(tgt-net,0)} kcal remaining today. Stay consistent!`,
+        ].filter(Boolean)
+
+        const insight = insights[0] as string
+        if (!insight) return null
+
         return (
-          <div style={{background:'var(--surface)',border:`0.5px solid var(--border)`,borderRadius:'var(--radius-lg)',padding:'12px 14px',marginBottom:'10px',display:'flex',gap:'10px',alignItems:'flex-start'}}>
-            <div style={{width:'30px',height:'30px',borderRadius:'50%',background:'var(--primary-pale)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-              <i className="ti ti-robot" style={{fontSize:'15px',color:'var(--primary)'}}/>
+          <div className="anim-scale-in" style={{background:'var(--surface)',border:`0.5px solid var(--border)`,borderRadius:'var(--radius-lg)',padding:'12px 14px',marginBottom:'10px',display:'flex',gap:'10px',alignItems:'flex-start'}}>
+            <div style={{width:'28px',height:'28px',borderRadius:'50%',background:'var(--primary-pale)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:'1px'}}>
+              <i className="ti ti-robot" style={{fontSize:'14px',color:'var(--primary)'}}/>
             </div>
-            <div>
-              <div style={{fontSize:'10px',fontWeight:'600',color:'var(--primary)',textTransform:'uppercase' as const,letterSpacing:'.06em',marginBottom:'3px'}}>Sage</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:'10px',fontWeight:'700',color:'var(--primary)',textTransform:'uppercase' as const,letterSpacing:'.06em',marginBottom:'3px'}}>Sage</div>
               <div style={{fontSize:'13px',color:'var(--text)',lineHeight:'1.5'}}>{insight}</div>
             </div>
+            <button onClick={()=>{
+              const el=document.getElementById('sage-insight-card')
+              if(el){el.style.display='none'}
+              try{sessionStorage.setItem(dismissedKey,'1')}catch{}
+            }} style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-3)',padding:'0',flexShrink:0,fontSize:'16px',lineHeight:1}}>
+              <i className="ti ti-x" style={{fontSize:'14px'}}/>
+            </button>
           </div>
         )
       })()}
