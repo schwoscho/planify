@@ -1,76 +1,69 @@
 import Anthropic from '@anthropic-ai/sdk'
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+const client = new Anthropic()
 
-export async function POST(request) {
+export async function POST(req) {
   try {
-    const { profile, filters, avoid } = await request.json()
+    const { profile, filters, avoid, servings = 2, mealDays = 1 } = await req.json()
 
-    const { diet, allergies, goal, budget, recipeType, time, difficulty, prefs } = filters
+    const dietStr = filters.diet?.join(', ') || 'no restrictions'
+    const allergyStr = filters.allergies?.join(', ') || 'none'
+    const goalStr = { bulk: 'muscle gain / bulking', cut: 'weight loss / cutting', maintain: 'balanced / maintenance', energy: 'energy boost', gut: 'gut health' }[profile?.goal] || 'balanced'
+    const cuisineStr = filters.cuisine ? `Cuisine: ${filters.cuisine}.` : 'Any cuisine.'
+    const timeStr = filters.time ? `Cook time: ${filters.time === 'quick' ? 'under 30 minutes' : filters.time === 'medium' ? '30-60 minutes' : '60+ minutes'}.` : ''
+    const diffStr = filters.difficulty ? `Difficulty: ${filters.difficulty}.` : ''
+    const avoidStr = avoid ? `Avoid: ${avoid}.` : ''
+    const servingsStr = servings > 1 ? `Scaled for ${servings} people.` : ''
+    const daysStr = mealDays > 1 ? `This meal will be repeated for ${mealDays} days.` : ''
+    const targetCals = profile?.tdee || 2000
+    const budget = filters.budget ? `Weekly budget: €${filters.budget}.` : ''
 
-    const goalPrompts = {
-      bulk: 'high protein 40g+ per meal, caloric surplus ~2700 kcal/day, complex carbs',
-      cut: 'caloric deficit ~1750 kcal/day, high protein 35g+, low sugar',
-      maintain: 'balanced macros ~2000 kcal/day, variety, nutritious',
-      energy: 'low glycaemic, iron-rich, anti-inflammatory, ~2000 kcal/day',
-      gut: 'high fibre, fermented foods, probiotics, ~1900 kcal/day',
+    const prompt = `You are a professional nutritionist and chef. Suggest 3 varied meal options.
+
+User profile:
+- Goal: ${goalStr}
+- Diet: ${dietStr}
+- Allergies: ${allergyStr}
+- Daily calorie target: ${targetCals} kcal
+- ${budget}
+- ${cuisineStr} ${timeStr} ${diffStr} ${avoidStr} ${servingsStr} ${daysStr}
+
+Respond ONLY with a valid JSON object. No markdown, no explanation, just JSON:
+{
+  "meals": [
+    {
+      "name": "meal name",
+      "desc": "2-sentence description",
+      "emoji": "single food emoji",
+      "cuisine": "cuisine type",
+      "timeTag": "e.g. 25 min",
+      "diffTag": "Easy / Medium / Advanced",
+      "macros": {
+        "calories": number,
+        "protein": number,
+        "carbs": number,
+        "fat": number
+      },
+      "ingredients": [
+        { "name": "ingredient", "qty": "amount with unit", "section": "Produce/Protein/Dairy/Grains/Pantry" }
+      ]
     }
+  ]
+}`
 
-    const typeGuide = {
-      dinner: 'dinner meal',
-      bread: 'bread, bake, or healthy cookie/treat (low sugar, nutritious)',
-      smoothie: 'vitamin-packed fruit or vegetable smoothie or shake',
-      snack: 'healthy snack or energy bite',
-    }
-
-    const timeStr = time ? {
-      quick: 'must be ready in under 30 minutes',
-      medium: 'should take 30–60 minutes',
-      weekend: 'can take 60+ minutes',
-    }[time] : ''
-
-    const rtDesc = recipeType?.length
-      ? recipeType.map(r => typeGuide[r] || r).join(' or ')
-      : 'dinner meal'
-
-    const prompt = `User profile: ${[
-      diet?.length ? 'diet restrictions: ' + diet.join(', ') : '',
-      allergies?.length ? 'allergies (NEVER include): ' + allergies.join(', ') : '',
-      goal ? 'nutrition goal: ' + goalPrompts[goal] : '',
-      `weekly budget: €${budget || 50}`,
-    ].filter(Boolean).join('; ')}
-
-Suggest 3 ${rtDesc} recipes.
-${timeStr ? 'Time: ' + timeStr : ''}
-${difficulty ? 'Difficulty: ' + difficulty : ''}
-${prefs?.length ? 'Style: ' + prefs.join(', ') : ''}
-${avoid ? 'Avoid: ' + avoid : ''}
-
-Return ONLY a valid JSON array with 3 objects:
-- name (string)
-- desc (string, max 18 words)
-- tags (array of 1-2 strings)
-- timeTag: "⚡ Under 30 min" | "🕐 30–60 min" | "👨‍🍳 60+ min"
-- diffTag: "😊 Easy" | "🤔 Medium" | "🎓 Advanced"
-- macros: {calories, protein, carbs, fat} (numbers per 2 servings)
-- ingredients: [{name, qty, section}] section: Produce|Dairy|Meat & Fish|Pantry|Frozen
-
-Raw JSON only, no markdown.`
-
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1600,
-      messages: [{ role: 'user', content: prompt }],
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: prompt }]
     })
 
-    const text = message.content.map(b => b.text || '').join('')
-    const meals = JSON.parse(text.replace(/```json|```/g, '').trim())
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}'
+    const clean = text.replace(/```json|```/g, '').trim()
+    const data = JSON.parse(clean)
 
-    return Response.json({ meals })
-  } catch (error) {
-    console.error('Suggest API error:', error)
-    return Response.json({ error: 'Failed to generate suggestions' }, { status: 500 })
+    return Response.json(data)
+  } catch (e) {
+    console.error('Suggest error:', e)
+    return Response.json({ meals: [] }, { status: 500 })
   }
 }

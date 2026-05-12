@@ -1,29 +1,39 @@
 import Anthropic from '@anthropic-ai/sdk'
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+const client = new Anthropic()
 
-export async function POST(request) {
+export async function POST(req) {
   try {
-    const { name, portion } = await request.json()
+    const { name, portion } = await req.json()
 
-    const prompt = `Estimate the nutritional content of: "${name}"${portion ? ' (' + portion + ')' : ' (1 typical serving)'}.
-Return ONLY a JSON object: {calories: number, protein: number, carbs: number, fat: number}
-All numbers are integers. No preamble, no markdown.`
+    const prompt = `You are a nutrition database. Return the nutritional information for this food.
 
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 100,
-      messages: [{ role: 'user', content: prompt }],
+Food: ${name}
+Portion: ${portion || '1 serving'}
+
+Respond ONLY with valid JSON, no markdown:
+{
+  "name": "food name",
+  "portion": "portion description",
+  "calories": number,
+  "protein": number,
+  "carbs": number,
+  "fat": number
+}`
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 200,
+      messages: [{ role: 'user', content: prompt }]
     })
 
-    const text = message.content.map(b => b.text || '').join('')
-    const macros = JSON.parse(text.replace(/```json|```/g, '').trim())
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}'
+    const clean = text.replace(/```json|```/g, '').trim()
+    const data = JSON.parse(clean)
 
-    return Response.json({ macros })
-  } catch (error) {
-    console.error('Food lookup API error:', error)
-    return Response.json({ error: 'Failed to look up food' }, { status: 500 })
+    return Response.json(data)
+  } catch (e) {
+    console.error('Food lookup error:', e)
+    return Response.json({ error: 'Could not look up food' }, { status: 500 })
   }
 }

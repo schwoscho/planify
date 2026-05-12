@@ -201,6 +201,15 @@ const GOAL_ADJ: Record<string,number> = { bulk:300, cut:-400, maintain:0, energy
 const TABS = ['home','meals','grocery','tracker','health','assist','profile']
 const TAB_LABELS: Record<string,string> = { home:'Home', meals:'Meals', tracker:'Tracker', grocery:'Grocery', health:'Health', assist:'Sage', profile:'Profile' }
 const TAB_ICONS: Record<string,string> = { home:'ti-home', meals:'ti-salad', tracker:'ti-chart-bar', grocery:'ti-shopping-cart', health:'ti-droplet', assist:'ti-robot', profile:'ti-user' }
+
+const COUNTRIES: Record<string,{name:string,flag:string,currency:string,stores:{id:string,name:string,color:string}[]}> = {
+  HU:{name:'Hungary',flag:'🇭🇺',currency:'Ft',stores:[{id:'tesco',name:'Tesco',color:'#003DA5'},{id:'lidl',name:'Lidl',color:'#0050AA'},{id:'aldi',name:'Aldi',color:'#00539F'},{id:'spar',name:'Spar',color:'#00843D'},{id:'penny',name:'Penny',color:'#E3000F'},{id:'cba',name:'CBA',color:'#E87722'}]},
+  DE:{name:'Germany',flag:'🇩🇪',currency:'€',stores:[{id:'rewe',name:'Rewe',color:'#CC0000'},{id:'edeka',name:'Edeka',color:'#FFD700'},{id:'lidl',name:'Lidl',color:'#0050AA'},{id:'aldi',name:'Aldi',color:'#00539F'},{id:'penny',name:'Penny',color:'#E3000F'}]},
+  AT:{name:'Austria',flag:'🇦🇹',currency:'€',stores:[{id:'billa',name:'Billa',color:'#CC0000'},{id:'spar',name:'Spar',color:'#00843D'},{id:'hofer',name:'Hofer',color:'#00539F'},{id:'lidl',name:'Lidl',color:'#0050AA'}]},
+  UK:{name:'United Kingdom',flag:'🇬🇧',currency:'£',stores:[{id:'tesco',name:'Tesco',color:'#003DA5'},{id:'sainsburys',name:"Sainsbury's",color:'#FF7500'},{id:'asda',name:'Asda',color:'#00843D'},{id:'aldi',name:'Aldi',color:'#00539F'},{id:'lidl',name:'Lidl',color:'#0050AA'}]},
+  FR:{name:'France',flag:'🇫🇷',currency:'€',stores:[{id:'carrefour',name:'Carrefour',color:'#004A97'},{id:'intermarche',name:'Intermarché',color:'#CC0000'},{id:'lidl',name:'Lidl',color:'#0050AA'},{id:'aldi',name:'Aldi',color:'#00539F'}]},
+  US:{name:'United States',flag:'🇺🇸',currency:'$',stores:[{id:'walmart',name:'Walmart',color:'#0071CE'},{id:'wholeFoods',name:'Whole Foods',color:'#00674B'},{id:'kroger',name:'Kroger',color:'#004990'},{id:'trader',name:"Trader Joe's",color:'#CC0000'}]},
+}
 const AVATARS = ['🥗','💪','🔥','⚡','🌿','🏃','🥑','👑','🌟','🎯']
 const DIETS = ['vegetarian','vegan','gluten-free','dairy-free','keto','halal']
 const ALLERGIES = ['nuts','shellfish','eggs','soy','fish','sesame']
@@ -408,6 +417,12 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const [tabKey, setTabKey] = useState(0)
   const [profileSubPage, setProfileSubPage] = useState<string|null>(null)
   const [calViewOffset, setCalViewOffset] = useState(0)
+  const [storeModalOpen, setStoreModalOpen] = useState(false)
+  const [userCountry, setUserCountry] = useState<string>(profile?.country||'HU')
+  const [userStores, setUserStores] = useState<string[]>(profile?.preferred_stores||[])
+  const [groceryOptimized, setGroceryOptimized] = useState<Record<string,{store:string,price:string}>>({})
+  const [groceryOptLoading, setGroceryOptLoading] = useState(false)
+  const [groceryTotalEstimate, setGroceryTotalEstimate] = useState('')
 
   // Meal planning — date-based
   const [activeDate, setActiveDate] = useState(todayKey())
@@ -1145,19 +1160,43 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   function renderGrocery() {
     const groups: Record<string,any[]>={}
     grocery.forEach((item:any)=>{ if(!groups[item.section])groups[item.section]=[]; groups[item.section].push(item) })
+    const selectedStoreNames = userStores.map(id=>COUNTRIES[userCountry]?.stores.find(s=>s.id===id)?.name).filter(Boolean)
     return (
       <div key={tabKey} className="anim-fade-up" style={{padding:'1rem 1.25rem 1rem'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'12px'}}>
           <div style={{fontSize:'16px',fontWeight:'600',color:'var(--color-text)',display:'flex',alignItems:'center',gap:'8px'}}>
-            🛒 Grocery list
+            <i className="ti ti-shopping-cart" style={{fontSize:'18px',color:'var(--color-primary)'}}/> Grocery list
           </div>
           {grocery.some((g:any)=>g.checked)&&(
-            <button className="pressable" onClick={async()=>{await saveGroceryItems(user.id,activeDate,grocery.filter((g:any)=>!g.checked));await loadGrocery()}}
+            <button className="pressable" onClick={async()=>{await saveGroceryItems(user.id,activeDate,grocery.filter((g:any)=>!g.checked));await loadGrocery();setGroceryOptimized({});setGroceryTotalEstimate('')}}
               style={{fontSize:'12px',color:'var(--color-text-muted)',background:'none',border:`0.5px solid var(--color-border)`,borderRadius:'8px',padding:'4px 10px',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',gap:'4px'}}>
               <i className="ti ti-trash" style={{fontSize:'12px'}}/>Clear done
             </button>
           )}
         </div>
+
+        {/* Store optimize banner */}
+        {grocery.length>0&&(
+          <div style={{marginBottom:'12px'}}>
+            {userStores.length===0 ? (
+              <button onClick={()=>setStoreModalOpen(true)}
+                style={{width:'100%',padding:'11px',background:'var(--color-surface-2)',border:`1px dashed var(--color-border)`,borderRadius:'var(--radius-md)',fontSize:'12px',color:'var(--color-text-muted)',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px'}}>
+                <i className="ti ti-map-pin" style={{fontSize:'14px'}}/>Set your country &amp; stores for smart shopping hints
+              </button>
+            ) : (
+              <div>
+                <button onClick={optimizeGrocery} disabled={groceryOptLoading}
+                  style={{width:'100%',padding:'11px',background:'var(--color-primary-pale)',border:`1px solid var(--color-primary-border)`,borderRadius:'var(--radius-md)',fontSize:'13px',color:'var(--color-primary)',cursor:'pointer',fontFamily:'var(--font-body)',fontWeight:'500',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px'}}>
+                  {groceryOptLoading
+                    ? <><i className="ti ti-loader-2 ti-spin" style={{fontSize:'15px'}}/>Finding best stores...</>
+                    : <><i className="ti ti-sparkles" style={{fontSize:'15px'}}/>{Object.keys(groceryOptimized).length>0?'Re-optimize':'Smart shop: '+selectedStoreNames.join(', ')}</>}
+                </button>
+                {groceryTotalEstimate&&<div style={{textAlign:'center' as const,fontSize:'12px',color:'var(--color-text-muted)',marginTop:'5px'}}>Estimated total: <strong>{groceryTotalEstimate}</strong></div>}
+              </div>
+            )}
+          </div>
+        )}
+
         {!grocery.length ? (
           <div className="empty-state">
             <img src="/images/empty-grocery.png" alt=""/>
@@ -1167,16 +1206,27 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
         ) : Object.entries(groups).map(([section,items])=>(
           <div key={section} style={{marginBottom:'1rem'}}>
             <span className="sl">{section}</span>
-            {items.map((item:any)=>(
+            {items.map((item:any)=>{
+              const opt = groceryOptimized[item.name]
+              const storeInfo = opt?.store ? COUNTRIES[userCountry]?.stores.find(s=>s.name===opt.store) : null
+              return (
               <div key={item.id} className="pressable" onClick={()=>toggleItem(item.id,item.checked)}
                 style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 13px',background:'var(--color-surface)',border:`0.5px solid var(--color-border)`,borderRadius:'var(--radius-md)',marginBottom:'6px',opacity:item.checked?.45:1,transition:'opacity .2s'}}>
                 <div style={{width:'20px',height:'20px',borderRadius:'6px',border:`1.5px solid ${item.checked?'var(--color-primary)':'var(--color-border)'}`,background:item.checked?'var(--color-primary)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .2s'}}>
                   {item.checked&&<i className="ti ti-check" style={{fontSize:'12px',color:'#fff'}}/>}
                 </div>
-                <span style={{fontSize:'13px',flex:1,textDecoration:item.checked?'line-through':'none'}}>{item.name}</span>
-                <span style={{fontSize:'12px',color:'var(--color-text-muted)',fontWeight:'500'}}>{item.qty}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <span style={{fontSize:'13px',textDecoration:item.checked?'line-through':'none',display:'block'}}>{item.name}</span>
+                  {opt&&!item.checked&&(
+                    <div style={{display:'flex',alignItems:'center',gap:'5px',marginTop:'2px'}}>
+                      {storeInfo&&<span style={{fontSize:'10px',fontWeight:'600',padding:'1px 7px',borderRadius:'20px',color:'#fff',background:storeInfo.color}}>{storeInfo.name}</span>}
+                      {opt.price&&<span style={{fontSize:'10px',color:'var(--color-text-muted)'}}>{opt.price}</span>}
+                    </div>
+                  )}
+                </div>
+                <span style={{fontSize:'12px',color:'var(--color-text-muted)',fontWeight:'500',flexShrink:0}}>{item.qty}</span>
               </div>
-            ))}
+            )})}
           </div>
         ))}
       </div>
@@ -1403,6 +1453,31 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     )
   }
 
+  async function saveCountryStores(country:string, stores:string[]) {
+    try {
+      const u=await saveProfile(user.id,{...profile,country,preferred_stores:stores})
+      onProfileUpdate(u); setUserCountry(country); setUserStores(stores); setStoreModalOpen(false)
+    } catch(e){console.error(e)}
+  }
+
+  async function optimizeGrocery() {
+    if(!grocery.length||!userStores.length) return
+    setGroceryOptLoading(true)
+    try {
+      const storeNames=userStores.map(id=>COUNTRIES[userCountry]?.stores.find(s=>s.id===id)?.name).filter(Boolean)
+      const res=await fetch('/api/grocery',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({items:grocery,country:userCountry,stores:storeNames})})
+      const data=await res.json()
+      if(data.items?.length) {
+        const map:Record<string,{store:string,price:string}>={}
+        data.items.forEach((i:any)=>{ map[i.name]={store:i.store||'',price:i.estimatedPrice||''} })
+        setGroceryOptimized(map)
+        setGroceryTotalEstimate(data.totalEstimate||'')
+      }
+    } catch(e){console.error(e)}
+    setGroceryOptLoading(false)
+  }
+
   function renderProfile() {
     if (profileSubPage==='account') return renderAccountSettings()
     if (profileSubPage==='settings') return renderAppSettings()
@@ -1497,6 +1572,18 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           <span className="sl">About</span>
           <div className="card card-sm" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
             <span style={{fontSize:'13px',fontWeight:'500'}}>App version</span>
+        <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em',marginBottom:'8px',marginTop:'1.25rem'}}>Shopping</div>
+        <div className="card pressable" onClick={()=>setStoreModalOpen(true)}
+          style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',cursor:'pointer',marginBottom:'8px'}}>
+          <div>
+            <div style={{fontSize:'14px',fontWeight:'500',color:'var(--color-text)'}}>Country &amp; stores</div>
+            <div style={{fontSize:'12px',color:'var(--color-text-muted)',marginTop:'2px'}}>
+              {COUNTRIES[userCountry]?.flag} {COUNTRIES[userCountry]?.name} · {userStores.length?`${userStores.length} store${userStores.length>1?'s':''} selected`:'No stores selected yet'}
+            </div>
+          </div>
+          <i className="ti ti-arrow-right" style={{fontSize:'15px',color:'var(--color-text-muted)'}}/>
+        </div>
+
             <span style={{fontSize:'12px',background:'var(--color-primary-pale)',color:'var(--color-primary)',padding:'3px 10px',borderRadius:'20px',fontWeight:'500'}}>v1.0 beta</span>
           </div>
           <div className="card card-sm" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -2202,6 +2289,48 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           </div>
         </div>
       )}
+
+      {/* ── COUNTRY + STORE MODAL ── */}
+      <Modal open={storeModalOpen} onClose={()=>setStoreModalOpen(false)} title="Country & stores">
+        {/* Country picker */}
+        <div style={{marginBottom:'1.25rem'}}>
+          <div className="sl" style={{marginBottom:'10px'}}>Your country</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
+            {Object.entries(COUNTRIES).map(([code,c])=>(
+              <div key={code} className="pressable" onClick={()=>{setUserCountry(code);setUserStores([])}}
+                style={{padding:'10px 12px',borderRadius:'var(--radius-md)',border:`1.5px solid ${userCountry===code?'var(--color-primary)':'var(--color-border)'}`,background:userCountry===code?'var(--color-primary-pale)':'var(--color-surface)',cursor:'pointer',display:'flex',alignItems:'center',gap:'8px',transition:'all .15s'}}>
+                <span style={{fontSize:'20px'}}>{c.flag}</span>
+                <span style={{fontSize:'12px',fontWeight:'500',color:userCountry===code?'var(--color-primary)':'var(--color-text)'}}>{c.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Store picker */}
+        <div style={{marginBottom:'1.25rem'}}>
+          <div className="sl" style={{marginBottom:'10px'}}>
+            Stores you shop at <span style={{fontWeight:'400',color:'var(--color-text-muted)'}}>(select all)</span>
+          </div>
+          <div style={{display:'flex',flexDirection:'column' as const,gap:'6px'}}>
+            {(COUNTRIES[userCountry]?.stores||[]).map(store=>{
+              const selected=userStores.includes(store.id)
+              return (
+                <div key={store.id} className="pressable"
+                  onClick={()=>setUserStores(s=>selected?s.filter(x=>x!==store.id):[...s,store.id])}
+                  style={{display:'flex',alignItems:'center',gap:'12px',padding:'11px 14px',borderRadius:'var(--radius-md)',border:`1.5px solid ${selected?'var(--color-primary)':'var(--color-border)'}`,background:selected?'var(--color-primary-pale)':'var(--color-surface)',cursor:'pointer',transition:'all .15s'}}>
+                  {/* Coloured brand dot */}
+                  <div style={{width:'10px',height:'10px',borderRadius:'50%',background:store.color,flexShrink:0}}/>
+                  <span style={{fontSize:'13px',fontWeight:'500',color:selected?'var(--color-primary)':'var(--color-text)',flex:1}}>{store.name}</span>
+                  {selected&&<i className="ti ti-check" style={{fontSize:'16px',color:'var(--color-primary)'}}/>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+        <button className="btn-primary pressable" onClick={()=>saveCountryStores(userCountry,userStores)}>
+          <i className="ti ti-check" style={{fontSize:'15px'}}/>Save preferences
+        </button>
+        <button className="btn-ghost" onClick={()=>setStoreModalOpen(false)} style={{marginTop:'8px'}}>Cancel</button>
+      </Modal>
 
       {savedToast&&(
         <div style={{position:'fixed' as const,top:'20px',left:'50%',transform:'translateX(-50%)',background:'var(--color-primary)',color:'#fff',padding:'10px 20px',borderRadius:'50px',fontSize:'13px',fontWeight:'500',zIndex:999,whiteSpace:'nowrap' as const,boxShadow:'0 4px 16px rgba(0,0,0,.15)',display:'flex',alignItems:'center',gap:'7px'}}>
