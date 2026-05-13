@@ -1053,7 +1053,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
               return slotMeal ? (
                 <div className="recipe-card anim-scale-in" style={{marginBottom:'12px',position:'relative' as const}}>
                   <div className="recipe-card-img" style={{padding:0,height:'100px',overflow:'hidden'}}>
-                    <MealImage name={slotMeal.name} emoji={slotMeal.emoji} size={400}/>
+                    <MealImage name={slotMeal.name} emoji={slotMeal.emoji}/>
                     <span style={{position:'absolute' as const,top:'8px',left:'10px',background:'rgba(0,0,0,.5)',borderRadius:'20px',padding:'3px 9px',fontSize:'10px',fontWeight:'600',color:'#fff'}}>
                       {MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.emoji} {MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.label}
                     </span>
@@ -1113,7 +1113,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                     <i className="ti ti-arrow-right" style={{fontSize:'14px',color:'var(--color-text-muted)',marginLeft:'auto'}}/>
                   </div>
                 )
-            })()}
+            )})()}
           </div>
         )}
       </div>
@@ -1204,7 +1204,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
               <i className="ti ti-run" style={{fontSize:'14px',color:'var(--color-text-muted)'}}/>Activity
             </div>
             <button className="pressable" onClick={()=>!isPastDate(activeDate)&&setActModalOpen(true)}
-              style={{fontSize:'12px',color:isPastDate(activeDate)?'var(--color-text-muted)':'var(--color-primary)',background:'none',border:'none',cursor:isPastDate(activeDate)?'default':'pointer',fontWeight:'500',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',gap:'3px',opacity:isPastDate(activeDate)?.5:1}}>
+              style={{fontSize:'12px',color:isPastDate(activeDate)?'var(--color-text-muted)':'var(--color-primary)',background:'none',border:'none',cursor:isPastDate(activeDate)?'default':'pointer',fontWeight:'500',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',gap:'3px',opacity:isPastDate(activeDate)?0.5:1}}>
               <i className="ti ti-plus" style={{fontSize:'13px'}}/>{isPastDate(activeDate)?'Past':'Add'}
             </button>
           </div>
@@ -1242,7 +1242,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                     style={{background:'none',border:'none',cursor:'pointer',fontSize:'20px',color:'var(--color-text-muted)',padding:'2px 8px',borderRadius:'8px',lineHeight:1}}>‹</button>
                   <div style={{fontSize:'11px',fontWeight:'600',color:'var(--color-text-muted)',textTransform:'uppercase' as const,letterSpacing:'.08em'}}>{mLabel}</div>
                   <button onClick={()=>setCalViewOffset(o=>Math.min(o+1,0))}
-                    style={{background:'none',border:'none',cursor:'pointer',fontSize:'20px',color:isCurrent?'var(--color-border)':'var(--color-text-muted)',padding:'2px 8px',borderRadius:'8px',lineHeight:1,opacity:isCurrent?.3:1}}>›</button>
+                    style={{background:'none',border:'none',cursor:'pointer',fontSize:'20px',color:isCurrent?'var(--color-border)':'var(--color-text-muted)',padding:'2px 8px',borderRadius:'8px',lineHeight:1,opacity:isCurrent?0.3:1}}>›</button>
                 </div>
                 <div className="cal-grid" style={{marginBottom:'4px'}}>
                   {['M','T','W','T','F','S','S'].map((d,i)=><div key={i} className="cal-hdr">{d}</div>)}
@@ -1345,7 +1345,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
               const storeInfo = opt?.store ? COUNTRIES[userCountry]?.stores.find(s=>s.name===opt.store) : null
               return (
               <div key={item.id} className="pressable" onClick={()=>toggleItem(item.id,item.checked)}
-                style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px',borderTop:`0.5px solid var(--color-border)`,opacity:item.checked?.4:1,transition:'opacity .2s'}}>
+                style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px',borderTop:`0.5px solid var(--color-border)`,opacity:item.checked?0.4:1,transition:'opacity .2s'}}>
                 <div style={{width:'20px',height:'20px',borderRadius:'6px',border:`1.5px solid ${item.checked?'var(--color-primary)':'var(--color-border)'}`,background:item.checked?'var(--color-primary)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .2s'}}>
                   {item.checked&&<i className="ti ti-check" style={{fontSize:'12px',color:'#fff'}}/>}
                 </div>
@@ -1421,7 +1421,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           </div>
 
           {/* Quick add */}
-          <div style={{display:'flex',gap:'6px',opacity:goalReached?.4:1}}>
+          <div style={{display:'flex',gap:'6px',opacity:goalReached?0.4:1}}>
             {[{ml:150,label:'+150ml',sub:'espresso'},{ml:250,label:'+250ml',sub:'glass'},{ml:330,label:'+330ml',sub:'can'},{ml:500,label:'+500ml',sub:'bottle'},{ml:-250,label:'−250ml',sub:'undo'}].map(b=>(
               <button key={b.ml} onClick={()=>!goalReached&&updateWater(b.ml)} disabled={goalReached}
                 style={{flex:1,padding:'7px 2px',borderRadius:'9px',border:`0.5px solid ${b.ml<0?'var(--color-border)':'var(--color-cyan-border)'}`,background:'var(--color-surface)',fontSize:'9px',fontWeight:'500',color:b.ml<0?'var(--color-text-muted)':'var(--color-cyan)',cursor:goalReached?'default':'pointer',fontFamily:'var(--font-body)',lineHeight:'1.5',textAlign:'center' as const}}>
@@ -2009,7 +2009,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           <div key={i} className="recipe-card anim-scale-in" style={{marginBottom:'10px',position:'relative' as const}}>
             {/* Image header using Unsplash */}
             <div className="recipe-card-img" style={{background:'var(--primary-pale)',overflow:'hidden',padding:0,height:'120px'}}>
-              <MealImage name={meal.name} emoji={meal.emoji} size={400}/>
+              <MealImage name={meal.name} emoji={meal.emoji}/>
               {meal.cuisine&&<span style={{position:'absolute' as const,top:'8px',left:'10px',background:'rgba(0,0,0,.5)',borderRadius:'20px',padding:'3px 9px',fontSize:'10px',fontWeight:'500',color:'#fff'}}>
                 {CUISINES.find(c=>c.value===meal.cuisine)?.flag} {meal.cuisine}
               </span>}
