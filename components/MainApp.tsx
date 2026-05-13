@@ -172,23 +172,52 @@ function BarcodeScanner({ onResult }: { onResult: (code:string)=>void }) {
     </div>
   )
 }
-// ── Meal Image Component — colored gradient with emoji (Unsplash Source deprecated) ──
-const FOOD_COLORS = ['#2D6A4F','#1B4332','#40916C','#52796F','#354F52','#2F3E46','#B5838D','#6D6875','#E07A5F','#3D405B']
-function MealImage({ name, emoji, size=80 }: { name:string, emoji?:string, size?:number }) {
-  const colorIdx = name.split('').reduce((a,c)=>a+c.charCodeAt(0),0) % FOOD_COLORS.length
-  const color = FOOD_COLORS[colorIdx]
-  const color2 = FOOD_COLORS[(colorIdx+3) % FOOD_COLORS.length]
+// ── Meal Image Component — fetches real food photos from Unsplash API ────────
+const imageCache: Record<string,string> = {}
+
+function MealImage({ name, emoji }: { name:string, emoji?:string }) {
+  const [imgUrl, setImgUrl] = useState<string|null>(imageCache[name]||null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(()=>{
+    if (imgUrl || failed) return
+    // Use Unsplash API with proper endpoint (requires NEXT_PUBLIC_UNSPLASH_KEY env var)
+    const key = process.env.NEXT_PUBLIC_UNSPLASH_KEY
+    if (!key) return
+    const query = encodeURIComponent(name.split(' ').slice(0,3).join(' '))
+    fetch(`https://api.unsplash.com/search/photos?query=${query}+food&per_page=1&orientation=landscape&client_id=${key}`)
+      .then(r=>r.json())
+      .then(data=>{
+        const url = data.results?.[0]?.urls?.small
+        if (url) { imageCache[name]=url; setImgUrl(url) }
+        else setFailed(true)
+      })
+      .catch(()=>setFailed(true))
+  },[name])
+
+  // Consistent color gradient fallback (always shows something nice)
+  const GRADIENTS = [
+    ['#2D6A4F','#40916C'],['#1B4332','#2D6A4F'],['#52796F','#354F52'],
+    ['#E07A5F','#F2CC8F'],['#3D405B','#81B29A'],['#6D6875','#B5838D'],
+    ['#457B9D','#1D3557'],['#E9C46A','#F4A261'],['#264653','#2A9D8F'],
+    ['#C77DFF','#7B2D8B'],
+  ]
+  const gi = name.split('').reduce((a,c)=>a+c.charCodeAt(0),0) % GRADIENTS.length
+  const [c1,c2] = GRADIENTS[gi]
+
   return (
-    <div style={{
-      width:'100%', height:`${size}px`,
-      background:`linear-gradient(135deg, ${color}, ${color2})`,
-      display:'flex', alignItems:'center', justifyContent:'center',
-      position:'relative' as const, overflow:'hidden',
-    }}>
-      <span style={{fontSize:`${Math.round(size*0.4)}px`,filter:'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'}}>{emoji||'🍽️'}</span>
-      {/* Decorative circles */}
-      <div style={{position:'absolute' as const,top:'-20%',right:'-10%',width:'60%',height:'120%',borderRadius:'50%',background:'rgba(255,255,255,0.06)'}}/>
-      <div style={{position:'absolute' as const,bottom:'-30%',left:'-5%',width:'50%',height:'100%',borderRadius:'50%',background:'rgba(255,255,255,0.04)'}}/>
+    <div style={{width:'100%',height:'120px',position:'relative' as const,overflow:'hidden',flexShrink:0}}>
+      {/* Always show gradient behind */}
+      <div style={{position:'absolute' as const,inset:0,background:`linear-gradient(135deg,${c1},${c2})`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <span style={{fontSize:'44px',filter:'drop-shadow(0 3px 6px rgba(0,0,0,0.4))'}}>{emoji||'🍽️'}</span>
+        <div style={{position:'absolute' as const,top:'-20%',right:'-10%',width:'60%',height:'140%',borderRadius:'50%',background:'rgba(255,255,255,0.07)'}}/>
+      </div>
+      {/* Real photo on top when loaded */}
+      {imgUrl&&!failed&&(
+        <img src={imgUrl} alt={name} loading="lazy"
+          style={{position:'absolute' as const,inset:0,width:'100%',height:'100%',objectFit:'cover'}}
+          onError={()=>setFailed(true)}/>
+      )}
     </div>
   )
 }
@@ -284,6 +313,7 @@ function dateKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 function todayKey() { return dateKey(new Date()) }
+function isPastDate(dk: string) { return dk < todayKey() }
 
 function useTheme() {
   const [theme, setTheme] = useState<'light'|'dark'>('light')
@@ -971,6 +1001,14 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           ))
         ) : (
           <div>
+            {/* Past date warning */}
+            {isPastDate(activeDate)&&(
+              <div style={{background:'var(--color-surface-2)',border:`0.5px solid var(--color-border)`,borderRadius:'var(--radius-md)',padding:'10px 13px',marginBottom:'12px',fontSize:'12px',color:'var(--color-text-muted)',display:'flex',alignItems:'center',gap:'8px'}}>
+                <i className="ti ti-lock" style={{fontSize:'14px'}}/>
+                Past date — you can view but not plan meals for previous days.
+              </div>
+            )}
+
             {profile?.goal&&<div style={{background:'var(--color-primary-pale)',border:`0.5px solid var(--color-primary-border)`,borderRadius:'var(--radius-md)',padding:'10px 13px',marginBottom:'12px',fontSize:'12px',color:'var(--color-primary)',display:'flex',alignItems:'center',gap:'8px'}}>
               <i className="ti ti-check" style={{fontSize:'14px'}}/>
               Tailored to: <strong>{GL[profile.goal]}</strong>{profile.diet?.length?` · ${profile.diet[0]}`:''} · €{profile.budget}/wk{tgt?` · ${tgt} kcal`:''}
@@ -1052,18 +1090,29 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                   </div>
                 </div>
               ) : (
-                <div className="pressable" onClick={()=>{setDraftFilters({...mealFilters});setDraftAvoid(avoidInput);setMealModalOpen(true);setMealSuggestions([])}}
-                  style={{borderRadius:'var(--radius-xl)',padding:'1.25rem',marginBottom:'12px',border:`1.5px dashed var(--color-border)`,display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
-                  <div style={{width:'32px',height:'32px',borderRadius:'50%',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    <span style={{fontSize:'18px'}}>{MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.emoji}</span>
+                isPastDate(activeDate) ? (
+                  <div style={{borderRadius:'var(--radius-xl)',padding:'1.25rem',marginBottom:'12px',border:`1px solid var(--color-border)`,background:'var(--color-surface-2)',display:'flex',alignItems:'center',gap:'10px',opacity:.6}}>
+                    <div style={{width:'32px',height:'32px',borderRadius:'50%',background:'var(--color-border)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <i className="ti ti-lock" style={{fontSize:'16px',color:'var(--color-text-muted)'}}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:'13px',fontWeight:'500',color:'var(--color-text-muted)'}}>No {MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.label} planned</div>
+                      <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginTop:'1px'}}>Can't plan meals for past dates</div>
+                    </div>
                   </div>
-                  <div>
-                    <div style={{fontSize:'13px',fontWeight:'500',color:'var(--color-text)'}}>Plan {MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.label} for {activeDateLabel()}</div>
-                    <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginTop:'1px'}}>AI-powered · based on your goals</div>
+                ) : (
+                  <div className="pressable" onClick={()=>{setDraftFilters({...mealFilters});setDraftAvoid(avoidInput);setMealModalOpen(true);setMealSuggestions([])}}
+                    style={{borderRadius:'var(--radius-xl)',padding:'1.25rem',marginBottom:'12px',border:`1.5px dashed var(--color-border)`,display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
+                    <div style={{width:'32px',height:'32px',borderRadius:'50%',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <span style={{fontSize:'18px'}}>{MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.emoji}</span>
+                    </div>
+                    <div>
+                      <div style={{fontSize:'13px',fontWeight:'500',color:'var(--color-text)'}}>Plan {MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.label} for {activeDateLabel()}</div>
+                      <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginTop:'1px'}}>AI-powered · based on your goals</div>
+                    </div>
+                    <i className="ti ti-arrow-right" style={{fontSize:'14px',color:'var(--color-text-muted)',marginLeft:'auto'}}/>
                   </div>
-                  <i className="ti ti-arrow-right" style={{fontSize:'14px',color:'var(--color-text-muted)',marginLeft:'auto'}}/>
-                </div>
-              )
+                )
             })()}
           </div>
         )}
@@ -1154,9 +1203,9 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             <div style={{fontSize:'12px',fontWeight:'600',color:'var(--color-text)',display:'flex',alignItems:'center',gap:'7px'}}>
               <i className="ti ti-run" style={{fontSize:'14px',color:'var(--color-text-muted)'}}/>Activity
             </div>
-            <button className="pressable" onClick={()=>setActModalOpen(true)}
-              style={{fontSize:'12px',color:'var(--color-primary)',background:'none',border:'none',cursor:'pointer',fontWeight:'500',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',gap:'3px'}}>
-              <i className="ti ti-plus" style={{fontSize:'13px'}}/>Add
+            <button className="pressable" onClick={()=>!isPastDate(activeDate)&&setActModalOpen(true)}
+              style={{fontSize:'12px',color:isPastDate(activeDate)?'var(--color-text-muted)':'var(--color-primary)',background:'none',border:'none',cursor:isPastDate(activeDate)?'default':'pointer',fontWeight:'500',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',gap:'3px',opacity:isPastDate(activeDate)?.5:1}}>
+              <i className="ti ti-plus" style={{fontSize:'13px'}}/>{isPastDate(activeDate)?'Past':'Add'}
             </button>
           </div>
           {!activityLog.length?<div style={{fontSize:'13px',color:'var(--color-text-muted)'}}>No activity logged.</div>:activityLog.map((item:any)=>{
