@@ -172,21 +172,23 @@ function BarcodeScanner({ onResult }: { onResult: (code:string)=>void }) {
     </div>
   )
 }
-// ── Meal Image Component — uses Unsplash Source (free, no API key) ─────────
+// ── Meal Image Component — colored gradient with emoji (Unsplash Source deprecated) ──
+const FOOD_COLORS = ['#2D6A4F','#1B4332','#40916C','#52796F','#354F52','#2F3E46','#B5838D','#6D6875','#E07A5F','#3D405B']
 function MealImage({ name, emoji, size=80 }: { name:string, emoji?:string, size?:number }) {
-  const [loaded, setLoaded] = useState(false)
-  const [error, setError] = useState(false)
-  // Unsplash Source: free, no key, just search by keyword
-  const query = encodeURIComponent(name.split(' ').slice(0,3).join(' '))
-  const url = `https://source.unsplash.com/${size}x${size}/?food,${query}`
+  const colorIdx = name.split('').reduce((a,c)=>a+c.charCodeAt(0),0) % FOOD_COLORS.length
+  const color = FOOD_COLORS[colorIdx]
+  const color2 = FOOD_COLORS[(colorIdx+3) % FOOD_COLORS.length]
   return (
-    <div style={{width:`${size}px`,height:`${size}px`,borderRadius:'var(--radius-md)',overflow:'hidden',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,position:'relative' as const}}>
-      {!error && (
-        <img src={url} alt={name} loading="lazy"
-          onLoad={()=>setLoaded(true)} onError={()=>setError(true)}
-          style={{width:'100%',height:'100%',objectFit:'cover',display:loaded?'block':'none'}}/>
-      )}
-      {(!loaded||error) && <span style={{fontSize:`${Math.round(size*0.45)}px`}}>{emoji||'🍽️'}</span>}
+    <div style={{
+      width:'100%', height:`${size}px`,
+      background:`linear-gradient(135deg, ${color}, ${color2})`,
+      display:'flex', alignItems:'center', justifyContent:'center',
+      position:'relative' as const, overflow:'hidden',
+    }}>
+      <span style={{fontSize:`${Math.round(size*0.4)}px`,filter:'drop-shadow(0 2px 4px rgba(0,0,0,0.3))'}}>{emoji||'🍽️'}</span>
+      {/* Decorative circles */}
+      <div style={{position:'absolute' as const,top:'-20%',right:'-10%',width:'60%',height:'120%',borderRadius:'50%',background:'rgba(255,255,255,0.06)'}}/>
+      <div style={{position:'absolute' as const,bottom:'-30%',left:'-5%',width:'50%',height:'100%',borderRadius:'50%',background:'rgba(255,255,255,0.04)'}}/>
     </div>
   )
 }
@@ -449,6 +451,11 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const [groceryOptimized, setGroceryOptimized] = useState<Record<string,{store:string,price:string}>>({})
   const [groceryOptLoading, setGroceryOptLoading] = useState(false)
   const [groceryTotalEstimate, setGroceryTotalEstimate] = useState('')
+  const [expandedGrocerySections, setExpandedGrocerySections] = useState<Record<string,boolean>>({})
+
+  function toggleGrocerySection(section: string) {
+    setExpandedGrocerySections(s=>({...s,[section]:!s[section]}))
+  }
 
   // Meal planning — date-based
   const [activeDate, setActiveDate] = useState(todayKey())
@@ -566,11 +573,14 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   }
 
   function calcStreak() {
+    if (!Object.keys(waterLog).length) return 0 // not loaded yet
     let streak=0
     for (let i=0; i<365; i++) {
       const d=new Date(); d.setDate(d.getDate()-i)
-      const val = i===0 ? waterToday : (waterLog[dateKey(d)]||0)
-      if (val>=waterGoal) streak++; else break
+      const dk=dateKey(d)
+      const val = i===0 ? Math.max(waterToday, waterLog[dk]||0) : (waterLog[dk]||0)
+      const goal = waterGoal // use current goal as baseline
+      if (val>=goal) streak++; else if(i>0) break // allow today to be building
     }
     return streak
   }
@@ -1070,8 +1080,11 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     const logC=foodLog.reduce((a:number,x:any)=>a+(x.carbs||0),0)
     const logF=foodLog.reduce((a:number,x:any)=>a+(x.fat||0),0)
     const mealCalMap: Record<string,number>={}
-    const mon=new Date(); mon.setDate(mon.getDate()-mon.getDay()+1)
-    for(let i=0;i<7;i++){const d=new Date(mon);d.setDate(mon.getDate()+i);const dk=dateKey(d);if(meals[dk]?.macros?.calories)mealCalMap[dk]=meals[dk].macros.calories}
+    // Build cal map from slot-keyed meals — sum all slots per day
+    Object.entries(meals).forEach(([key,m]:any)=>{
+      const dk=key.includes('_')?key.split('_').slice(0,-1).join('_'):key
+      if(m?.macros?.calories) mealCalMap[dk]=(mealCalMap[dk]||0)+m.macros.calories
+    })
 
     return (
       <div key={tabKey} className="anim-fade-up" style={{padding:'0 1.25rem 1rem',display:'flex',flexDirection:'column',gap:'10px'}}>
@@ -1194,9 +1207,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                     const cals=mealCalMap[dk]||0; const hasMeal=cals>0
                     const dotColor=cals>tgt*1.1?'var(--color-red)':cals>tgt*0.85?'var(--color-primary)':'var(--color-blue)'
                     return (
-                      <div key={day} className={`cal-day${isToday?' today':''}`}>
+                      <div key={day} className={`cal-day pressable${isToday?' today':''}${dk===activeDate?' selected':''}`}
+                        onClick={()=>{setActiveDate(dk);setActiveMealSlot('lunch')}}>
                         <span className="cal-day-num">{day}</span>
-                        {hasMeal&&<div className="cal-dot" style={{background:isToday?'rgba(255,255,255,.7)':dotColor}}/>}
+                        {hasMeal&&<div className="cal-dot" style={{background:isToday||dk===activeDate?'rgba(255,255,255,.7)':dotColor}}/>}
                       </div>
                     )
                   })}
@@ -1260,15 +1274,29 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
             <div className="empty-title">Your list is empty</div>
             <div className="empty-desc">Plan a meal and tap "Add to grocery" to build your shopping list.</div>
           </div>
-        ) : Object.entries(groups).map(([section,items])=>(
-          <div key={section} style={{marginBottom:'1rem'}}>
-            <span className="sl">{section}</span>
-            {items.map((item:any)=>{
+        ) : Object.entries(groups).map(([section,items]:[string,any[]])=>{
+          const checkedCount=items.filter(i=>i.checked).length
+          const isExpanded=expandedGrocerySections[section]!==false // default open
+          return (
+          <div key={section} style={{marginBottom:'8px',background:'var(--color-surface)',border:`0.5px solid var(--color-border)`,borderRadius:'var(--radius-lg)',overflow:'hidden'}}>
+            {/* Section header — tap to collapse */}
+            <div className="pressable" onClick={()=>toggleGrocerySection(section)}
+              style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',cursor:'pointer'}}>
+              <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                <span className="sl" style={{marginBottom:0}}>{section}</span>
+                <span style={{fontSize:'11px',color:'var(--color-text-muted)'}}>
+                  {checkedCount}/{items.length}
+                </span>
+              </div>
+              <i className={`ti ${isExpanded?'ti-chevron-up':'ti-chevron-down'}`} style={{fontSize:'14px',color:'var(--color-text-muted)'}}/>
+            </div>
+            {/* Items */}
+            {isExpanded&&items.map((item:any)=>{
               const opt = groceryOptimized[item.name]
               const storeInfo = opt?.store ? COUNTRIES[userCountry]?.stores.find(s=>s.name===opt.store) : null
               return (
               <div key={item.id} className="pressable" onClick={()=>toggleItem(item.id,item.checked)}
-                style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 13px',background:'var(--color-surface)',border:`0.5px solid var(--color-border)`,borderRadius:'var(--radius-md)',marginBottom:'6px',opacity:item.checked?.45:1,transition:'opacity .2s'}}>
+                style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px',borderTop:`0.5px solid var(--color-border)`,opacity:item.checked?.4:1,transition:'opacity .2s'}}>
                 <div style={{width:'20px',height:'20px',borderRadius:'6px',border:`1.5px solid ${item.checked?'var(--color-primary)':'var(--color-border)'}`,background:item.checked?'var(--color-primary)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .2s'}}>
                   {item.checked&&<i className="ti ti-check" style={{fontSize:'12px',color:'#fff'}}/>}
                 </div>
@@ -1285,7 +1313,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
               </div>
             )})}
           </div>
-        ))}
+        )})}
       </div>
     )
   }
