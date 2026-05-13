@@ -1,45 +1,176 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { createClient } from '@supabase/supabase-js'
 
 const client = new Anthropic()
 
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+)
+
 export async function POST(req) {
   try {
-    const { messages, profile, mealSummary } = await req.json()
+    const { messages, profile, mealSummary, userId } = await req.json()
 
-    const goalStr = { bulk: 'bulking / muscle gain', cut: 'cutting / weight loss', maintain: 'balanced maintenance', energy: 'energy boost', gut: 'gut health' }[profile?.goal] || 'balanced'
+    const goalStr = { bulk: 'bulking', cut: 'cutting', maintain: 'balanced', energy: 'energy boost', gut: 'gut health' }[profile?.goal] || 'balanced'
     const tgt = profile?.tdee ? Math.max(1200, profile.tdee + ({ bulk: 300, cut: -400, maintain: 0, energy: 0, gut: 0 }[profile?.goal] || 0)) : 2000
+    const today = new Date().toISOString().split('T')[0]
 
-    const system = `You are Sage, a friendly and knowledgeable personal nutrition coach inside the Planify app.
+    // Tools Sage can use
+    const tools = [
+      {
+        name: 'log_food',
+        description: 'Log a food item to the user\'s food diary for today. Use this when the user asks to log, track, or add a food item.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Food name' },
+            portion: { type: 'string', description: 'Portion size e.g. "1 serving", "200g"' },
+            calories: { type: 'number', description: 'Estimated calories' },
+            protein: { type: 'number', description: 'Protein in grams' },
+            carbs: { type: 'number', description: 'Carbs in grams' },
+            fat: { type: 'number', description: 'Fat in grams' },
+            meal_time: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack'], description: 'Meal time' }
+          },
+          required: ['name', 'calories']
+        }
+      },
+      {
+        name: 'log_activity',
+        description: 'Log a physical activity for today. Use when user asks to log exercise or activity.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            label: { type: 'string', description: 'Activity name e.g. "Running"' },
+            duration: { type: 'number', description: 'Duration in minutes' },
+            burned: { type: 'number', description: 'Estimated calories burned' },
+            type: { type: 'string', description: 'Activity type e.g. "running", "cycling"' }
+          },
+          required: ['label', 'duration', 'burned']
+        }
+      },
+      {
+        name: 'log_water',
+        description: 'Log water intake for today.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            amount_ml: { type: 'number', description: 'Amount in millilitres' }
+          },
+          required: ['amount_ml']
+        }
+      }
+    ]
+
+    const system = `You are Sage, a friendly personal nutrition coach inside the Planify app.
 
 User profile:
-- Name: ${profile?.username || 'there'}
 - Goal: ${goalStr}
-- Daily calorie target: ${tgt} kcal
+- Daily target: ${tgt} kcal
 - Diet: ${profile?.diet?.join(', ') || 'no restrictions'}
 - Allergies: ${profile?.allergies?.join(', ') || 'none'}
-- Weekly budget: €${profile?.budget || 70}
-${mealSummary ? `- Current meal plan: ${mealSummary}` : ''}
+- Budget: €${profile?.budget || 70}/week
+${mealSummary ? `- Meal plan: ${mealSummary}` : ''}
 
 Guidelines:
-- Be warm, encouraging, and specific. Use the user's actual data when relevant.
-- Keep responses concise (2-4 sentences usually). Use bullet points for lists.
-- Always give actionable advice, not just general tips.
-- When suggesting foods, be specific with portions and calories.
-- Never diagnose medical conditions. Suggest seeing a doctor for health concerns.
+- Be warm, encouraging, concise (2-4 sentences).
+- When the user asks you to LOG or TRACK something (food, exercise, water), USE THE TOOLS to actually do it.
+- After using a tool, confirm what you logged in a friendly way.
+- For nutrition questions, give specific actionable advice.
+- Never claim to have logged something without using the tool.
 - Respond in the same language the user writes in.`
 
+    // First call to get potential tool use
     const response = await client.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: 500,
+      max_tokens: 1000,
       system,
-      messages: messages.slice(-20).map((m) => ({ role: m.role, content: m.content }))
+      tools,
+      messages: messages.slice(-20).map(m => ({ role: m.role, content: m.content }))
     })
 
-    const reply = response.content[0].type === 'text' ? response.content[0].text : 'Sorry, I had trouble responding. Please try again.'
+    let reply = ''
+    const actions = []
 
-    return Response.json({ reply })
+    // Process tool calls
+    for (const block of response.content) {
+      if (block.type === 'tool_use' && userId) {
+        const input = block.input
+
+        if (block.name === 'log_food') {
+          await supabaseAdmin.from('food_log').insert({
+            user_id: userId,
+            date: today,
+            meal_time: input.meal_time || 'snack',
+            name: input.name,
+            portion: input.portion || '1 serving',
+            calories: Math.round(input.calories || 0),
+            protein: Math.round((input.protein || 0) * 10) / 10,
+            carbs: Math.round((input.carbs || 0) * 10) / 10,
+            fat: Math.round((input.fat || 0) * 10) / 10,
+          })
+          actions.push(`✓ Logged ${input.name} (${Math.round(input.calories)} kcal)`)
+        }
+
+        if (block.name === 'log_activity') {
+          await supabaseAdmin.from('activity_log').insert({
+            user_id: userId,
+            logged_date: today,
+            type: input.type || 'other',
+            label: input.label,
+            duration: input.duration,
+            burned: input.burned,
+          })
+          actions.push(`✓ Logged ${input.label} — ${input.duration} min, ~${input.burned} kcal burned`)
+        }
+
+        if (block.name === 'log_water') {
+          // Get current water log
+          const { data: existing } = await supabaseAdmin
+            .from('water_log')
+            .select('amount')
+            .eq('user_id', userId)
+            .eq('logged_date', today)
+            .single()
+
+          const currentAmount = existing?.amount || 0
+          const newAmount = currentAmount + input.amount_ml
+
+          await supabaseAdmin.from('water_log').upsert({
+            user_id: userId,
+            logged_date: today,
+            amount: newAmount,
+            goal: profile?.water_goal || 2500
+          }, { onConflict: 'user_id,logged_date' })
+          actions.push(`✓ Logged ${input.amount_ml}ml water`)
+        }
+      }
+
+      if (block.type === 'text') {
+        reply += block.text
+      }
+    }
+
+    // If we used tools, do a follow-up to get the confirmation message
+    if (actions.length > 0 && !reply) {
+      const followUp = await client.messages.create({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 300,
+        system,
+        messages: [
+          ...messages.slice(-20).map(m => ({ role: m.role, content: m.content })),
+          { role: 'assistant', content: response.content },
+          { role: 'user', content: `Actions completed: ${actions.join(', ')}. Confirm briefly.` }
+        ]
+      })
+      reply = followUp.content.find(b => b.type === 'text')?.text || actions.join('\n')
+    }
+
+    if (!reply) reply = 'I\'m having trouble right now. Please try again.'
+
+    return Response.json({ reply, actions })
   } catch (e) {
     console.error('Chat error:', e)
-    return Response.json({ reply: 'Sorry, I\'m having trouble right now. Please try again in a moment.' }, { status: 500 })
+    return Response.json({ reply: 'Sorry, I\'m having trouble right now. Please try again.' }, { status: 500 })
   }
 }

@@ -10,6 +10,7 @@ interface Props {
   onAddMeal:()=>void; onLogFood:()=>void; onLogActivity:()=>void
   onAddWater:(ml:number)=>void; onSwitchTab:(tab:string)=>void
   onViewAllMeals:()=>void; onGoToProfile:()=>void
+  sageDismissed: boolean; onDismissSage:()=>void
 }
 
 export default function Dashboard(p: Props) {
@@ -140,45 +141,36 @@ export default function Dashboard(p: Props) {
         })}
       </div>
 
-      {/* Sage insight — dismissible popup, not always visible */}
-      {(()=>{
+      {/* Sage insight — dismissible, shown once per day */}
+      {!p.sageDismissed&&(()=>{
         const remainingProtein=Math.max(macroProtein-logP,0)
         const calPct=tgt>0?Math.round((net/tgt)*100):0
-        const today=new Date().toDateString()
-        const dismissedKey=`sage-dismissed-${today}`
-
-        // Pick the most relevant insight
         const insights=[
           net===0 && `Your daily target is ${tgt} kcal. Log your first meal to get started!`,
-          remainingProtein>40 && `You're ${remainingProtein}g short on protein. Add eggs, chicken, or Greek yogurt to hit your goal.`,
-          calPct>110 && `You're ${calPct-100}% over your calorie target today. A lighter dinner or a walk would help.`,
-          calPct>=85 && calPct<=100 && `Almost there — just ${Math.max(tgt-net,0)} kcal left. You're on track today!`,
-          p.waterToday<p.waterGoal*0.4 && `Hydration check — you're only at ${Math.round((p.waterToday/p.waterGoal)*100)}% of your water goal.`,
+          remainingProtein>40 && `You're ${remainingProtein}g short on protein. Add eggs, chicken, or Greek yogurt.`,
+          calPct>110 && `You're ${calPct-100}% over your calorie target. A lighter dinner or a walk would help.`,
+          calPct>=85&&calPct<=100 && `Almost there — just ${Math.max(tgt-net,0)} kcal left. You're on track!`,
+          p.waterToday<p.waterGoal*0.4 && `Hydration check — only ${Math.round((p.waterToday/p.waterGoal)*100)}% of your water goal.`,
           p.waterStreak>=7 && `${p.waterStreak}-day water streak! Consistency is the key to results.`,
-          p.waterStreak>=3 && p.waterStreak<7 && `${p.waterStreak}-day streak going strong. Keep it up!`,
-          Object.values(p.meals).filter(Boolean).length===0 && `No meals planned this week yet. Head to the Meals tab to get AI suggestions tailored to your ${p.profile?.goal||'goal'}.`,
-          p.activityLog.length===0 && net>0 && `You haven't logged any activity today. Even a 20-min walk burns around 100 kcal.`,
-          calPct>0 && calPct<50 && `You've only consumed ${calPct}% of your daily target. Make sure you're eating enough.`,
-          `You have ${Math.max(tgt-net,0)} kcal remaining today. Stay consistent!`,
+          p.waterStreak>=3&&p.waterStreak<7 && `${p.waterStreak}-day streak going strong. Keep it up!`,
+          Object.values(p.meals).filter(Boolean).length===0 && `No meals planned yet. Head to Meals for AI suggestions.`,
+          p.activityLog.length===0&&net>0 && `No activity logged today. Even a 20-min walk burns ~100 kcal.`,
+          calPct>0&&calPct<50 && `You've only hit ${calPct}% of your daily target. Make sure to eat enough.`,
+          `${Math.max(tgt-net,0)} kcal remaining today. Stay consistent!`,
         ].filter(Boolean)
-
         const insight = insights[0] as string
         if (!insight) return null
-
         return (
           <div className="anim-scale-in" style={{background:'var(--surface)',border:`0.5px solid var(--border)`,borderRadius:'var(--radius-lg)',padding:'12px 14px',marginBottom:'10px',display:'flex',gap:'10px',alignItems:'flex-start'}}>
-            <div style={{width:'28px',height:'28px',borderRadius:'50%',background:'var(--primary-pale)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:'1px'}}>
+            <div style={{width:'28px',height:'28px',borderRadius:'50%',background:'var(--primary-pale)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
               <i className="ti ti-robot" style={{fontSize:'14px',color:'var(--primary)'}}/>
             </div>
             <div style={{flex:1}}>
               <div style={{fontSize:'10px',fontWeight:'700',color:'var(--primary)',textTransform:'uppercase' as const,letterSpacing:'.06em',marginBottom:'3px'}}>Sage</div>
               <div style={{fontSize:'13px',color:'var(--text)',lineHeight:'1.5'}}>{insight}</div>
             </div>
-            <button onClick={()=>{
-              const el=document.getElementById('sage-insight-card')
-              if(el){el.style.display='none'}
-              try{sessionStorage.setItem(dismissedKey,'1')}catch{}
-            }} style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-3)',padding:'0',flexShrink:0,fontSize:'16px',lineHeight:1}}>
+            <button onClick={p.onDismissSage}
+              style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-3)',padding:'0',flexShrink:0,lineHeight:1}}>
               <i className="ti ti-x" style={{fontSize:'14px'}}/>
             </button>
           </div>
@@ -251,31 +243,23 @@ export default function Dashboard(p: Props) {
         </button>
       </div>
 
-      {/* Today's meal */}
-      <div className="card">
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-          <div style={{fontSize:'12px',fontWeight:'600',color:'var(--color-text)',display:'flex',alignItems:'center',gap:'7px'}}>
-            <i className="ti ti-salad" style={{fontSize:'14px',color:'var(--color-primary)'}}/>
-            {dateStr} meal
+      {/* Meals quick access - replaces single "Today's meal" card */}
+      <div className="card pressable" onClick={p.onViewAllMeals}
+        style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',padding:'13px 16px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+          <div style={{width:'36px',height:'36px',borderRadius:'50%',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <i className="ti ti-salad" style={{fontSize:'18px',color:'var(--color-primary)'}}/>
           </div>
-          <button onClick={p.onViewAllMeals} style={{fontSize:'12px',color:'var(--color-primary)',background:'none',border:'none',cursor:'pointer',fontWeight:'500',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',gap:'3px'}}>
-            View all <i className="ti ti-arrow-right" style={{fontSize:'11px'}}/>
-          </button>
-        </div>
-        {todayMeal ? (
-          <div style={{background:'var(--color-primary-pale)',borderRadius:'var(--radius-md)',padding:'11px 13px',border:`0.5px solid var(--color-primary-border)`}}>
-            <div style={{fontFamily:'var(--font-display)',fontSize:'15px',color:'var(--color-text)',marginBottom:'2px'}}>{todayMeal.name}</div>
-            <div style={{fontSize:'11px',color:'var(--color-text-muted)'}}>{todayMeal.macros?.calories} kcal · {todayMeal.macros?.protein}g protein</div>
-          </div>
-        ) : (
-          <div className="pressable" onClick={p.onAddMeal}
-            style={{borderRadius:'var(--radius-md)',padding:'12px',border:`1.5px dashed var(--color-border)`,display:'flex',alignItems:'center',gap:'10px',cursor:'pointer'}}>
-            <div style={{width:'30px',height:'30px',borderRadius:'50%',background:'var(--color-primary-pale)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-              <i className="ti ti-plus" style={{fontSize:'16px',color:'var(--color-primary)'}}/>
+          <div>
+            <div style={{fontSize:'14px',fontWeight:'600',color:'var(--color-text)'}}>Plan your meals</div>
+            <div style={{fontSize:'11px',color:'var(--color-text-muted)',marginTop:'1px'}}>
+              {Object.keys(p.meals).length>0
+                ? `${Object.keys(p.meals).length} meal${Object.keys(p.meals).length!==1?'s':''} planned this week`
+                : 'Tap to get AI meal suggestions'}
             </div>
-            <span style={{fontSize:'13px',color:'var(--color-text-muted)'}}>No meal planned for {p.activeDateLabel}</span>
           </div>
-        )}
+        </div>
+        <i className="ti ti-arrow-right" style={{fontSize:'15px',color:'var(--color-text-muted)'}}/>
       </div>
 
       {/* Water + streak */}
