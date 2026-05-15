@@ -2,84 +2,60 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const client = new Anthropic()
 
+// Vercel: extend timeout to 60s (needed for AI response)
+export const maxDuration = 60
+
 export async function POST(req) {
   try {
     const { profile, filters, avoid, servings = 2, mealDays = 1, mealSlot = 'lunch', recentMeals = [] } = await req.json()
 
-    const goalStr = { bulk: 'muscle gain / bulking', cut: 'weight loss / cutting', maintain: 'balanced / maintenance', energy: 'energy boost', gut: 'gut health' }[profile?.goal] || 'balanced'
-    const tgt = profile?.tdee ? Math.max(1200, profile.tdee + ({ bulk: 300, cut: -400, maintain: 0, energy: 0, gut: 0 }[profile?.goal] || 0)) : 2000
+    const goalStr = {
+      bulk: 'muscle gain',
+      cut: 'weight loss',
+      maintain: 'maintenance',
+      energy: 'energy boost',
+      gut: 'gut health'
+    }[profile?.goal] || 'balanced'
 
-    // Slot-specific guidance
+    const tgt = profile?.tdee
+      ? Math.max(1200, profile.tdee + ({ bulk: 300, cut: -400, maintain: 0, energy: 0, gut: 0 }[profile?.goal] || 0))
+      : 2000
+
     const slotGuidance = {
-      breakfast: `BREAKFAST meal: Keep it SIMPLE and quick (under 20 min). Think: oats, eggs, yogurt, smoothies, toast with toppings, pancakes, granola. People do NOT eat heavy or complex meals for breakfast. Target ~${Math.round(tgt * 0.25)} kcal.`,
-      lunch: `LUNCH meal: Medium complexity, balanced and filling. Think: salads, grain bowls, sandwiches, pasta, soups, stir-fries. Target ~${Math.round(tgt * 0.35)} kcal.`,
-      dinner: `DINNER meal: Can be more elaborate but still practical. Think: protein + veg + carb combinations, roasted dishes, curries, grilled meats/fish. Target ~${Math.round(tgt * 0.35)} kcal.`,
+      breakfast: `BREAKFAST: Simple, quick (under 20 min). E.g. oats, eggs, yogurt, smoothie, toast. Target ~${Math.round(tgt * 0.25)} kcal.`,
+      lunch: `LUNCH: Balanced, filling. E.g. salad, grain bowl, sandwich, pasta, soup. Target ~${Math.round(tgt * 0.35)} kcal.`,
+      dinner: `DINNER: More elaborate. E.g. protein + veg + carb, curry, roasted dish, grilled fish. Target ~${Math.round(tgt * 0.35)} kcal.`,
     }[mealSlot] || ''
 
     const recentStr = recentMeals.length > 0
-      ? `\nDO NOT suggest these meals (used in the last 2 weeks): ${recentMeals.join(', ')}`
+      ? `Avoid (recently used): ${recentMeals.slice(0, 10).join(', ')}`
       : ''
 
-    const prompt = `You are a professional nutritionist and chef. Suggest exactly 5 varied ${mealSlot} options.
-
-User profile:
-- Goal: ${goalStr}
-- Diet: ${filters.diet?.join(', ') || 'no restrictions'}
-- Allergies: ${filters.allergies?.join(', ') || 'none'}
-- Daily calorie target: ${tgt} kcal
-- Weekly budget: €${filters.budget || 70}
-- Cuisine preference: ${filters.cuisine || 'any'}
-- Cook time preference: ${filters.time || 'any'}
-- Difficulty: ${filters.difficulty || 'any'}
-- Avoid: ${avoid || 'nothing specific'}
-- Scaled for: ${servings} person(s)
-${recentStr}
-
+    // Compact prompt — ask for 5 meals WITHOUT full recipe steps to keep response small
+    // Recipe steps are fetched separately when user taps "Recipe"
+    const prompt = `Nutritionist: suggest 5 varied ${mealSlot} options.
+Diet: ${filters.diet?.join(', ') || 'any'} | Allergies: ${filters.allergies?.join(', ') || 'none'}
+Goal: ${goalStr} | Target: ${tgt} kcal | Budget: €${filters.budget || 70}/week
+Cuisine: ${filters.cuisine || 'any'} | Time: ${filters.time || 'any'} | Difficulty: ${filters.difficulty || 'any'}
+Servings: ${servings} | Avoid: ${avoid || 'nothing'} | ${recentStr}
 ${slotGuidance}
 
-IMPORTANT: Give 5 DIFFERENT meals. Each must have a complete recipe with all steps.
-
-Respond ONLY with valid JSON:
-{
-  "meals": [
-    {
-      "name": "specific meal name",
-      "desc": "appetizing 2-sentence description",
-      "emoji": "single relevant food emoji",
-      "cuisine": "cuisine type",
-      "timeTag": "e.g. 20 min",
-      "diffTag": "Easy / Medium / Advanced",
-      "macros": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0 },
-      "recipe": {
-        "prepTime": "10 min",
-        "cookTime": "20 min",
-        "steps": [
-          "Step 1: ...",
-          "Step 2: ...",
-          "Step 3: ..."
-        ],
-        "tips": "Optional chef tip"
-      },
-      "ingredients": [
-        { "name": "ingredient", "qty": "amount with unit", "section": "Produce/Protein/Dairy/Grains/Pantry/Spices" }
-      ]
-    }
-  ]
-}`
+Return ONLY valid JSON, no markdown:
+{"meals":[{"name":"...","desc":"1 sentence","emoji":"🍽","cuisine":"...","timeTag":"25 min","diffTag":"Easy","macros":{"calories":0,"protein":0,"carbs":0,"fat":0},"ingredients":[{"name":"...","qty":"200g","section":"Produce"}]}]}`
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 4000,
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }]
     })
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '{}'
+    const text = response.content[0]?.type === 'text' ? response.content[0].text : '{}'
     const clean = text.replace(/```json|```/g, '').trim()
     const data = JSON.parse(clean)
 
     return Response.json(data)
   } catch (e) {
     console.error('Suggest error:', e)
-    return Response.json({ meals: [] }, { status: 500 })
+    return Response.json({ meals: [], error: e?.message || String(e) }, { status: 500 })
   }
 }

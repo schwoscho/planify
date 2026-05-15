@@ -730,17 +730,19 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     setMealFilters({...draftFilters}); setAvoidInput(draftAvoid)
     setSuggestLoading(true); setMealSuggestions([])
     try {
-      // Collect recently used meal names (last 2 weeks) to avoid repeats
-      const recentMeals = Object.values(meals)
-        .filter(Boolean)
-        .map((m:any) => m.name)
-        .filter(Boolean)
+      const recentMeals = Object.values(meals).filter(Boolean).map((m:any) => m.name).filter(Boolean)
       const res=await fetch('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({profile,filters:{diet:profile.diet,allergies:profile.allergies,goal:profile.goal,budget:profile.budget,time:draftFilters.time,difficulty:draftFilters.diff,cuisine:draftFilters.cuisine},avoid:draftAvoid,servings,mealDays,mealSlot:activeMealSlot,recentMeals})})
       const data=await res.json()
+      if (data.error) {
+        alert(`AI error: ${data.error}\n\nCheck that ANTHROPIC_API_KEY is set correctly in Vercel.`)
+      }
       setMealSuggestions(data.meals||[])
       if(data.meals?.length) loadMealRatings(data.meals.map((m:any)=>m.name))
-    } catch(e){console.error(e)}
+    } catch(e){
+      console.error(e)
+      alert(`Network error: ${e}`)
+    }
     setSuggestLoading(false)
   }
 

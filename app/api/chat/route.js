@@ -173,6 +173,10 @@ Guidelines:
     return Response.json({ reply, actions })
   } catch (e) {
     console.error('Chat error:', e)
-    return Response.json({ reply: 'Sorry, I\'m having trouble right now. Please try again.' }, { status: 500 })
+    const msg = e?.message || String(e)
+    return Response.json({
+      reply: `Error: ${msg}`,
+      actions: []
+    }, { status: 500 })
   }
 }
