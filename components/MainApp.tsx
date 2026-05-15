@@ -522,8 +522,27 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
   const [myRatings, setMyRatings] = useState<Record<string,number>>({}) // user's own ratings
   const [ratingTarget, setRatingTarget] = useState<string|null>(null)
   const [recipeModal, setRecipeModal] = useState<any>(null)
+  const [recipeLoading, setRecipeLoading] = useState(false)
   const [weightGoalInput, setWeightGoalInput] = useState(profile?.weight_goal?.toString()||'')
   const [sageDismissed, setSageDismissed] = useState(false)
+
+  async function openRecipe(meal: any) {
+    setRecipeModal(meal)
+    // If recipe steps not already fetched, fetch them now
+    if (!meal.recipe?.steps?.length) {
+      setRecipeLoading(true)
+      try {
+        const res = await fetch('/api/recipe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mealName: meal.name, ingredients: meal.ingredients, servings })
+        })
+        const data = await res.json()
+        setRecipeModal((prev: any) => prev ? {...prev, recipe: data} : null)
+      } catch(e) { console.error(e) }
+      setRecipeLoading(false)
+    }
+  }
 
   // Meal suggestions
   const [mealModalOpen, setMealModalOpen] = useState(false)
@@ -2114,7 +2133,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                 <button className="btn-primary pressable" style={{flex:1}} onClick={()=>selectMeal(meal)}>
                   <i className="ti ti-calendar-plus" style={{fontSize:'15px'}}/>Add to {activeDateLabel()}
                 </button>
-                {meal.recipe&&<button className="pressable" onClick={()=>setRecipeModal(meal)}
+                {<button className="pressable" onClick={()=>openRecipe(meal)}
                   style={{padding:'10px 12px',borderRadius:'var(--radius-md)',border:`0.5px solid var(--color-border)`,background:'var(--color-surface)',cursor:'pointer',display:'flex',alignItems:'center',gap:'4px',fontSize:'12px',color:'var(--color-text-muted)',fontFamily:'var(--font-body)'}}>
                   <i className="ti ti-book" style={{fontSize:'13px'}}/>Recipe
                 </button>}
@@ -2534,7 +2553,12 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                 </div>
               )}
               {/* Steps */}
-              {recipeModal.recipe?.steps?.length>0&&(
+              {recipeLoading ? (
+                <div style={{textAlign:'center' as const,padding:'2rem 0',color:'var(--color-text-muted)'}}>
+                  <i className="ti ti-loader-2 ti-spin" style={{fontSize:'28px',color:'var(--color-primary)',display:'block',marginBottom:'8px'}}/>
+                  <div style={{fontSize:'13px'}}>Loading recipe steps...</div>
+                </div>
+              ) : recipeModal?.recipe?.steps?.length>0&&(
                 <div style={{marginBottom:'1.25rem'}}>
                   <div style={{fontSize:'13px',fontWeight:'700',color:'var(--color-text)',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>
                     <i className="ti ti-chef-hat" style={{fontSize:'15px',color:'var(--color-primary)'}}/>Instructions
