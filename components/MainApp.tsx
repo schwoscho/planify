@@ -180,19 +180,17 @@ function MealImage({ name, emoji }: { name:string, emoji?:string }) {
   const [failed, setFailed] = useState(false)
 
   useEffect(()=>{
-    if (imgUrl || failed) return
+    // Reset state when name changes, serve from cache if available
+    if (imageCache[name]) { setImgUrl(imageCache[name]); setFailed(false); return }
+    setImgUrl(null); setFailed(false)
     const key = process.env.NEXT_PUBLIC_UNSPLASH_KEY
     if (!key) return
-    // Build a very specific query: use full meal name + "dish" + "plated"
-    // This avoids getting raw ingredients or unrelated food
     const cleanName = name.replace(/[^a-zA-Z0-9 ]/g,'')
     const query = encodeURIComponent(`${cleanName} dish plated meal`)
     fetch(`https://api.unsplash.com/search/photos?query=${query}&per_page=3&orientation=landscape&client_id=${key}`)
       .then(r=>r.json())
       .then(data=>{
-        // Pick the best result — prefer photos tagged as food
-        const photos = data.results || []
-        const url = photos[0]?.urls?.small || null
+        const url = data.results?.[0]?.urls?.small || null
         if (url) { imageCache[name]=url; setImgUrl(url) }
         else setFailed(true)
       })
@@ -780,6 +778,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
       name: ing.name,
       qty: toStorePack(ing.qty),
       section: ing.section,
+      meal_source: meal.name, // group by meal name in grocery list
       checked: false,
     }))
     try {
@@ -939,8 +938,10 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
     const newHistory=[...chatHistory,{role:'user',content:msg}]
     setChatHistory(newHistory); setChatLoading(true)
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const authToken = session?.access_token || ''
       const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({messages:newHistory.slice(-20),profile,userId:user.id,mealSummary:Object.entries(meals).map(([dk,m]:any)=>`${dk}: ${m.name}`).join(', ')})})
+        body:JSON.stringify({messages:newHistory.slice(-20),profile,userId:user.id,authToken,mealSummary:Object.entries(meals).map(([dk,m]:any)=>`${dk}: ${m.name}`).join(', ')})})
       const data=await res.json()
       const updated=[...newHistory,{role:'assistant',content:data.reply}]
       setChatHistory(updated)
@@ -1115,7 +1116,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
               return slotMeal ? (
                 <div className="recipe-card anim-scale-in" style={{marginBottom:'12px',position:'relative' as const}}>
                   <div className="recipe-card-img" style={{padding:0,height:'100px',overflow:'hidden'}}>
-                    <MealImage name={slotMeal.name} emoji={slotMeal.emoji}/>
+                    <MealImage key={slotMeal.name} name={slotMeal.name} emoji={slotMeal.emoji}/>
                     <span style={{position:'absolute' as const,top:'8px',left:'10px',background:'rgba(0,0,0,.5)',borderRadius:'20px',padding:'3px 9px',fontSize:'10px',fontWeight:'600',color:'#fff'}}>
                       {MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.emoji} {MEAL_SLOTS.find(s=>s.id===activeMealSlot)?.label}
                     </span>
@@ -1136,18 +1137,27 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
                       ))}
                     </div>}
                     <div style={{display:'flex',gap:'8px',marginTop:'10px'}}>
-                      <button className="pressable" onClick={()=>{setDraftFilters({...mealFilters});setDraftAvoid(avoidInput);setMealModalOpen(true);setMealSuggestions([])}}
-                        style={{flex:1,padding:'9px',borderRadius:'var(--radius-md)',border:`0.5px solid var(--color-border)`,background:'var(--color-surface)',fontSize:'12px',fontWeight:'500',color:'var(--color-text-muted)',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',justifyContent:'center',gap:'4px'}}>
-                        <i className="ti ti-refresh" style={{fontSize:'12px'}}/>Change
+                      {/* Recipe button - always available */}
+                      <button className="pressable" onClick={()=>openRecipe(slotMeal)}
+                        style={{padding:'9px 12px',borderRadius:'var(--radius-md)',border:`0.5px solid var(--color-border)`,background:'var(--color-surface)',fontSize:'12px',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',gap:'4px',color:'var(--color-text-muted)'}}>
+                        <i className="ti ti-book" style={{fontSize:'12px'}}/>Recipe
                       </button>
+                      {/* Save to favourites - always available */}
                       <button className="pressable" onClick={()=>handleSaveRecipe(slotMeal)}
-                        style={{padding:'9px 12px',borderRadius:'var(--radius-md)',border:`0.5px solid var(--color-border)`,background:'var(--color-surface)',fontSize:'12px',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',gap:'4px'}}>
-                        <i className="ti ti-heart" style={{fontSize:'12px',color:'var(--color-red)'}}/>Save
+                        style={{padding:'9px 12px',borderRadius:'var(--radius-md)',border:`0.5px solid var(--color-border)`,background:'var(--color-surface)',fontSize:'12px',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',gap:'4px',color:'var(--color-red)'}}>
+                        <i className="ti ti-heart" style={{fontSize:'12px'}}/>Save
                       </button>
-                      <button className="pressable" onClick={()=>addToGrocery(slotKey)}
-                        style={{flex:1,padding:'9px',borderRadius:'var(--radius-md)',border:'none',background:'var(--color-primary)',fontSize:'12px',fontWeight:'500',color:'#fff',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',justifyContent:'center',gap:'4px'}}>
-                        <i className="ti ti-shopping-cart" style={{fontSize:'12px'}}/>Grocery
-                      </button>
+                      {/* Change and Grocery - blocked for past dates */}
+                      {!isPastDate(activeDate)&&<>
+                        <button className="pressable" onClick={()=>{setDraftFilters({...mealFilters});setDraftAvoid(avoidInput);setMealModalOpen(true);setMealSuggestions([])}}
+                          style={{flex:1,padding:'9px',borderRadius:'var(--radius-md)',border:`0.5px solid var(--color-border)`,background:'var(--color-surface)',fontSize:'12px',fontWeight:'500',color:'var(--color-text-muted)',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',justifyContent:'center',gap:'4px'}}>
+                          <i className="ti ti-refresh" style={{fontSize:'12px'}}/>Change
+                        </button>
+                        <button className="pressable" onClick={()=>addToGrocery(slotKey)}
+                          style={{flex:1,padding:'9px',borderRadius:'var(--radius-md)',border:'none',background:'var(--color-primary)',fontSize:'12px',fontWeight:'500',color:'#fff',cursor:'pointer',fontFamily:'var(--font-body)',display:'flex',alignItems:'center',justifyContent:'center',gap:'4px'}}>
+                          <i className="ti ti-shopping-cart" style={{fontSize:'12px'}}/>Grocery
+                        </button>
+                      </>}
                     </div>
                   </div>
                 </div>
@@ -1341,7 +1351,11 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
 
   function renderGrocery() {
     const groups: Record<string,any[]>={}
-    grocery.forEach((item:any)=>{ if(!groups[item.section])groups[item.section]=[]; groups[item.section].push(item) })
+    grocery.forEach((item:any)=>{
+      const key = item.meal_source || item.section || 'Other'
+      if(!groups[key]) groups[key]=[]
+      groups[key].push(item)
+    })
     const selectedStoreNames = userStores.map(id=>COUNTRIES[userCountry]?.stores.find(s=>s.id===id)?.name).filter(Boolean)
     return (
       <div key={tabKey} className="anim-fade-up" style={{padding:'1rem 1.25rem 1rem'}}>
@@ -1392,10 +1406,11 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           <div key={section} style={{marginBottom:'8px',background:'var(--color-surface)',border:`0.5px solid var(--color-border)`,borderRadius:'var(--radius-lg)',overflow:'hidden'}}>
             {/* Section header — tap to collapse */}
             <div className="pressable" onClick={()=>toggleGrocerySection(section)}
-              style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',cursor:'pointer'}}>
+              style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',cursor:'pointer'}}>
               <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                <span className="sl" style={{marginBottom:0}}>{section}</span>
-                <span style={{fontSize:'11px',color:'var(--color-text-muted)'}}>
+                <i className="ti ti-bowl-chopsticks" style={{fontSize:'15px',color:'var(--color-primary)'}}/>
+                <span style={{fontSize:'13px',fontWeight:'600',color:'var(--color-text)'}}>{section}</span>
+                <span style={{fontSize:'11px',color:'var(--color-text-muted)',background:'var(--color-surface-2)',padding:'1px 7px',borderRadius:'20px'}}>
                   {checkedCount}/{items.length}
                 </span>
               </div>
@@ -2098,7 +2113,7 @@ export default function MainApp({ user, profile, onProfileUpdate }: any) {
           <div key={i} className="recipe-card anim-scale-in" style={{marginBottom:'10px',position:'relative' as const}}>
             {/* Image header using Unsplash */}
             <div className="recipe-card-img" style={{background:'var(--primary-pale)',overflow:'hidden',padding:0,height:'120px'}}>
-              <MealImage name={meal.name} emoji={meal.emoji}/>
+              <MealImage key={meal.name} name={meal.name} emoji={meal.emoji}/>
               {meal.cuisine&&<span style={{position:'absolute' as const,top:'8px',left:'10px',background:'rgba(0,0,0,.5)',borderRadius:'20px',padding:'3px 9px',fontSize:'10px',fontWeight:'500',color:'#fff'}}>
                 {CUISINES.find(c=>c.value===meal.cuisine)?.flag} {meal.cuisine}
               </span>}
