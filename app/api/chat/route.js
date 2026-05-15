@@ -82,13 +82,27 @@ Guidelines:
 - Never claim to have logged something without using the tool.
 - Respond in the same language the user writes in.`
 
+    // Clean history: only send text messages, strip any tool_use/tool_result blocks
+    // that were saved from previous turns — Claude rejects incomplete tool sequences
+    const cleanHistory = messages
+      .slice(-20)
+      .map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string'
+          ? m.content
+          : Array.isArray(m.content)
+            ? m.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
+            : String(m.content)
+      }))
+      .filter(m => m.content.trim().length > 0)
+
     // First call to get potential tool use
     const response = await client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 1000,
       system,
       tools,
-      messages: messages.slice(-20).map(m => ({ role: m.role, content: m.content }))
+      messages: cleanHistory
     })
 
     let reply = ''
@@ -160,9 +174,8 @@ Guidelines:
         max_tokens: 300,
         system,
         messages: [
-          ...messages.slice(-20).map(m => ({ role: m.role, content: m.content })),
-          { role: 'assistant', content: response.content },
-          { role: 'user', content: `Actions completed: ${actions.join(', ')}. Confirm briefly.` }
+          ...cleanHistory,
+          { role: 'user', content: `You just completed: ${actions.join(', ')}. Confirm briefly and naturally.` }
         ]
       })
       reply = followUp.content.find(b => b.type === 'text')?.text || actions.join('\n')
